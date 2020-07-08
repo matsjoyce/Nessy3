@@ -3,8 +3,12 @@
 #include "bytecode.hpp"
 #include <iostream>
 
-int print(ObjectRef x) {
-    std::cout << " -> " << x << std::endl;
+int print(const std::vector<ObjectRef>& args) {
+    std::cout << " -> ";
+    for (auto& arg : args) {
+        std::cout << arg << " ";
+    }
+    std::cout << std::endl;
     return 0;
 }
 

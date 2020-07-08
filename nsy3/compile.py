@@ -184,17 +184,28 @@ def compile_stmt(a, ctx):
         yield skip_label
     elif isinstance(a, ast.IfStmt):
         else_label, end_label = ctx.label(), ctx.label()
-        yield Bytecode.SETSKIP(end_label)
+        if_comp = Bytecode.SEQ(*list(compile_stmt(a.if_block, ctx)))
+        else_comp = Bytecode.SEQ(*list(compile_stmt(a.else_block, ctx)))
+        # If there is a return statement in either block, the skip must be a return skip to avoid another return statement executing
+        if any(op.type == Bytecode.RETURN for op in itertools.chain(if_comp.linearize(), else_comp.linearize())):
+            yield Bytecode.SETSKIP(0)
+        else:
+            yield Bytecode.SETSKIP(end_label)
         yield Bytecode.JUMP_IFNOT(else_label, compile_expr(a.expr, ctx))
-        yield from compile_stmt(a.if_block, ctx)
+        yield if_comp
         yield Bytecode.JUMP(end_label)
         yield else_label
-        yield from compile_stmt(a.else_block, ctx)
+        yield else_comp
         yield end_label
     elif isinstance(a, ast.WhileStmt):
         start_label, end_label = ctx.label(), ctx.label()
         ctx.push_loop(start_label, end_label)
-        yield Bytecode.SETSKIP(end_label)
+        block_comp = Bytecode.SEQ(*list(compile_stmt(a.block, ctx)))
+        # If there is a return statement in the block, the skip must be a return skip to avoid another return statement executing
+        if any(op.type == Bytecode.RETURN for op in block_comp.linearize()):
+            yield Bytecode.SETSKIP(0)
+        else:
+            yield Bytecode.SETSKIP(end_label)
         yield start_label
         yield Bytecode.JUMP_IFNOT(end_label, compile_expr(a.expr, ctx))
         yield from compile_stmt(a.block, ctx)
