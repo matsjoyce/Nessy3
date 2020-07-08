@@ -32,6 +32,7 @@ add_library(libexecutor SHARED
             src/serialisation.cpp
             src/builtinfunction.cpp
             src/builtins.cpp
+            src/executionengine.cpp
 )
 target_link_libraries(libexecutor docopt)
 

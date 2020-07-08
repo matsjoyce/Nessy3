@@ -36,6 +36,12 @@ template<class T, class... Args> struct FunctionHolder : public AbstractFunction
     ObjectRef call(const std::vector<ObjectRef>& args) { return fw(args, f); }
 };
 
+template<class T> struct FunctionHolder<T, const std::vector<ObjectRef>&> : public AbstractFunctionHolder {
+    std::function<T(const std::vector<ObjectRef>&)> f;
+    FunctionHolder(std::function<T(const std::vector<ObjectRef>&)> f) : f(f) {}
+    ObjectRef call(const std::vector<ObjectRef>& args) { return convert_to_objref<T>::convert(f(args)); }
+};
+
 extern std::shared_ptr<Type> builtin_function_type;
 
 class BuiltinFunction : public Object {
@@ -49,6 +55,7 @@ public:
 // TODO: collapse fw into FunctionHolder, and then collapse FunctionHolder into BuiltinFunction (maybe).
 
 template<> struct convert_from_objref<int> { static int convert(const ObjectRef& objref); };
+template<> struct convert_from_objref<unsigned char> { static unsigned char convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<double> { static double convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<std::string> { static std::string convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<ObjectRef> { static ObjectRef convert(const ObjectRef& objref); };
@@ -58,6 +65,26 @@ template<class T> struct convert_from_objref<std::shared_ptr<T>> {
             return obj;
         }
         throw std::runtime_error("Not the right type");
+    }
+};
+template<class T> struct convert_from_objref<T*> {
+    static T* convert(const ObjectRef& objref) {
+        if (auto obj = dynamic_cast<T*>(objref.get())) {
+            return obj;
+        }
+        throw std::runtime_error("Not the right type");
+    }
+};
+template<class V> struct convert_from_objref<std::vector<V>> {
+    static std::vector<V> convert(const ObjectRef& objref) {
+        if (auto obj = dynamic_cast<List*>(objref.get())) {
+            std::vector<V> res;
+            for (auto item : obj->get()) {
+                res.push_back(convert_from_objref<V>::convert(item));
+            }
+            return res;
+        }
+        throw std::runtime_error("Not a list");
     }
 };
 template<class K, class V> struct convert_from_objref<std::map<K, V>> {
@@ -74,8 +101,24 @@ template<class K, class V> struct convert_from_objref<std::map<K, V>> {
 };
 
 template<> struct convert_to_objref<int> { static ObjectRef convert(const int& objref); };
+template<> struct convert_to_objref<bool> { static ObjectRef convert(const bool& objref); };
 template<> struct convert_to_objref<double> { static ObjectRef convert(const double& objref); };
 template<> struct convert_to_objref<std::string> { static ObjectRef convert(const std::string& objref); };
 template<> struct convert_to_objref<ObjectRef> { static ObjectRef convert(const ObjectRef& objref); };
+template<class T> struct convert_to_objref<std::shared_ptr<T>> {
+    static ObjectRef convert(const std::shared_ptr<T>& objref) {
+        return objref;
+    }
+};
+
+// Deduction helpers
+
+template<class T, class... Args> std::function<std::shared_ptr<T>(Args...)> constructor() {
+    return {std::make_shared<T, Args...>};
+}
+
+template<class T, class R, class... Args> std::function<R(T*, Args...)> method(R(T::*meth)(Args...)) {
+    return {meth};
+}
 
 #endif // BUILTINFUNCTION_HPP

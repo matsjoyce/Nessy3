@@ -6,15 +6,13 @@ class BCodeMeta(type):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.__ann_idxes__ = dict(zip(self.__annotations__.keys(), itertools.count()))
-
-    def __getattr__(self, name):
-        if name in self.__annotations__:
-            return BCode(self.__ann_idxes__[name], self.__annotations__[name])
-        raise AttributeError(name)
-
-    def __getitem__(self, idx):
-        return list(self.__annotations__.keys())[idx]
+        id = 0
+        for name, item in self.__dict__.items():
+            if isinstance(item, BCodeType):
+                item.name = name
+                if item.emit:
+                    item.id = id
+                    id += 1
 
 
 def indent(lst):
@@ -22,32 +20,23 @@ def indent(lst):
 
 
 class BCode:
-    __slots__ = ["id", "bcodetype", "arg_v", "subs_v"]
+    __slots__ = ["type", "arg_v", "subs_v", "pos"]
     BYTES_PATTERN = struct.Struct("<BI")
 
-    def __init__(self, id, bcodetype, arg_v=None, subs_v=None):
-        self.id = id
-        self.bcodetype = bcodetype
+    def __init__(self, type, arg_v, subs_v):
+        self.type = type
         self.arg_v = arg_v
         self.subs_v = subs_v
-
-    def __call__(self, *args):
-        if self.bcodetype.arg:
-            arg = args[0]
-            subs = args[1:]
-        else:
-            arg = None
-            subs = args
-        return type(self)(self.id, self.bcodetype, arg, subs)
+        self.pos = None
 
     def __repr__(self):
-        return f"BCode({self.id}, {self.arg_v})"
+        return f"BCode({self.type}, {self.arg_v})"
 
     def __str__(self):
-        if self.bcodetype.arg:
-            return f"{Bytecode[self.id]} {self.arg_v}"
+        if self.type.arg:
+            return f"{self.type} {self.arg_v}"
         else:
-            return f"{Bytecode[self.id]}"
+            return f"{self.type}"
 
     def pprint(self):
         return [str(self)] + indent([z for x in self.subs_v for z in x.pprint()])
@@ -55,20 +44,31 @@ class BCode:
     def to_str(self):
         return "\n".join(self.pprint())
 
+    def linearize(self):
+        if not self.subs_v:
+            me = self
+        else:
+            me = type(self)(self.type, self.arg_v, ())
+        return [z for x in self.subs_v for z in x.linearize()] + ([me] if self.type is not Bytecode.SEQ else [])
+
     def to_bytes(self):
         if self.arg_v:
-            arg = self.arg_v.pos if isinstance(self.arg_v, Label) else self.arg_v
-        elif self.bcodetype.auto_arg:
-            arg = self.bcodetype.auto_arg(self.subs_v)
+            arg = self.arg_v.pos if isinstance(self.arg_v, BCode) else self.arg_v
         else:
             arg = 0
-        print("X", self.id, arg)
-        return [z for x in self.subs_v for z in x.to_bytes()] + ([self.BYTES_PATTERN.pack(self.id, arg)] if self.bcodetype.emit else [])
+        print(self.type, arg)
+        return [z for x in self.subs_v for z in x.to_bytes()] + ([self.BYTES_PATTERN.pack(self.type.id, arg)] if self.type.emit else [])
+
+    def size(self):
+        return 5
 
     def resolve_labels(self, start=0):
+        if self.type is Bytecode.LABEL:
+            print("L",self.arg_v)
         for sub in self.subs_v:
             start = sub.resolve_labels(start)
-        return start + self.bcodetype.emit
+        self.pos = start
+        return start + self.type.emit * self.size()
 
 
 class BCodeType:
@@ -77,25 +77,22 @@ class BCodeType:
         self.subs = subs
         self.auto_arg = auto_arg
         self.emit = emit
-
-
-class Label:
-    def __init__(self, id):
-        self.id = id
-        self.pos = None
-
-    def pprint(self):
-        return [str(self)]
+        self.id = self.name = None
 
     def __str__(self):
-        return f"Label {self.id}"
+        return self.name
 
-    def to_bytes(self):
-        return []
-
-    def resolve_labels(self, start):
-        self.pos = start
-        return start
+    def __call__(self, *args):
+        if self.arg:
+            arg_v = args[0]
+            subs_v = args[1:]
+        elif self.auto_arg:
+            arg_v = self.auto_arg(args)
+            subs_v = args
+        else:
+            arg_v = None
+            subs_v = args
+        return BCode(self, arg_v, subs_v)
 
 
 class Seq:
@@ -104,18 +101,21 @@ class Seq:
 
 
 class Bytecode(metaclass=BCodeMeta):
-    KWARG: BCodeType("name", ("value"))
-    GETATTR: BCodeType(subs=("obj", "name"))
-    CALL: BCodeType(subs=("func", "args"), auto_arg=lambda s: len(s) - 1)
-    GET: BCodeType("name")
-    SET: BCodeType("name", ("value"))
-    CONST: BCodeType("value")
-    JUMP: BCodeType("pos")
-    JUMP_NOTIF: BCodeType("pos", ("cond"))
-    DROP: BCodeType("num")
-    RETURN: BCodeType(subs=("expr"))
-    GETENV: BCodeType()
+    KWARG = BCodeType("name", ("value"))
+    GETATTR = BCodeType(subs=("obj", "name"))
+    CALL = BCodeType(subs=("func", "args"), auto_arg=lambda s: len(s) - 1)
+    GET = BCodeType("name")
+    SET = BCodeType("name", ("value"))
+    CONST = BCodeType("value")
+    JUMP = BCodeType("pos")
+    JUMP_IFNOT = BCodeType("pos", ("cond"))
+    DROP = BCodeType("num")
+    RETURN = BCodeType(subs=("expr"))
+    GETENV = BCodeType()
+    # pos is either a position to jump to, or 0 to indicate a thunk return
+    SETSKIP = BCodeType("pos")
 
     # Fake ops
 
-    SEQ: BCodeType(subs=("ops"), emit=False)
+    SEQ = BCodeType(subs=("ops"), emit=False)
+    LABEL = BCodeType("id", emit=False)

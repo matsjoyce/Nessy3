@@ -351,6 +351,10 @@ class NSY2Parser(Parser):
     def expr(self, p):
         return ast.Binop("[]", p.expr0, p.expr1)
 
+    @_("expr DOT NAME")
+    def expr(self, p):
+        return ast.Binop(".", p.expr, p.NAME)
+
     @_(
         # Arith
         "NAME PLUSEQ expr",

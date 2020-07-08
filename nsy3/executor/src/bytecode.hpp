@@ -7,7 +7,7 @@
 #include "object.hpp"
 
 
-enum class Ops : char {
+enum class Ops : unsigned char {
     KWARG,
     GETATTR,
     CALL,
@@ -15,10 +15,11 @@ enum class Ops : char {
     SET,
     CONST,
     JUMP,
-    JUMP_NOTIF,
+    JUMP_IFNOT,
     DROP,
     RETURN,
-    GETENV
+    GETENV,
+    SETSKIP
 };
 
 class Code : public Object {
@@ -36,14 +37,33 @@ public:
     friend class Frame;
 };
 
+class Signature : public Object {
+    std::vector<std::string> names;
+    std::vector<ObjectRef> defaults;
+    unsigned char flags;
+public:
+    Signature(std::vector<std::string> names, std::vector<ObjectRef> defaults, unsigned char flags);
+    std::string to_str() override;
+    static std::shared_ptr<Type> type;
+
+    enum : char {
+        VARARGS,
+        VARKWARGS
+    };
+
+    friend class Function;
+};
+
 class Function : public Object {
     std::shared_ptr<Code> code;
     int offset;
+    std::shared_ptr<Signature> signature_;
     std::map<std::string, ObjectRef> env;
 public:
-    Function(std::shared_ptr<Code> code, int offset, std::map<std::string, ObjectRef> env);
+    Function(std::shared_ptr<Code> code, int offset, std::shared_ptr<Signature> signature, std::map<std::string, ObjectRef> env);
     ObjectRef call(const std::vector<ObjectRef>& args) override;
     std::string to_str() override;
+    std::shared_ptr<Signature> signature() { return signature_; }
 };
 
 #endif // BYTECODE_HPP
