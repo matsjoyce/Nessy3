@@ -56,7 +56,12 @@ void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_str
         }
         else {
             limit = position;
-            generate_return_thunk = true;
+            std::cout << "RETURN THUNK" << std::endl;
+            auto exec_thunk = std::make_shared<ExecutionThunk>(std::dynamic_pointer_cast<Frame>(shared_from_this()));
+            auto name_thunk = std::make_shared<NameExtractThunk>("return");
+            exec_thunk->subscribe(name_thunk);
+            thunk->subscribe(exec_thunk);
+            return_thunk = name_thunk;
         }
     }
     else {
@@ -163,17 +168,8 @@ ObjectRef Frame::execute() {
             }
         }
     }
-    if (generate_return_thunk) {
-        // Alive is false, so return a "return" thunk
-        std::cout << "RETURN THUNK" << std::endl;
-        limit = static_cast<unsigned int>(-1);
-        generate_return_thunk = false;
-        auto exec_thunk = std::make_shared<ExecutionThunk>(std::dynamic_pointer_cast<Frame>(shared_from_this()));
-        auto name_thunk = std::make_shared<NameExtractThunk>("return");
-        exec_thunk->subscribe(name_thunk);
-        return name_thunk;
-    }
-    return {};
+    limit = static_cast<unsigned int>(-1);
+    return return_thunk;
 }
 
 ExecutionThunk::ExecutionThunk(std::shared_ptr<Frame> frame) : frame(frame) {

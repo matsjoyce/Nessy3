@@ -32,8 +32,7 @@ int main(int argc, const char** argv) {
         c->print();
         auto start_env = builtins;
         start_env["__exec__"] = execengine;
-        Frame frame(c, 0, start_env);
-        frame.execute();
+        std::make_shared<Frame>(c, 0, start_env)->execute();
     }
     execengine->finish();
 

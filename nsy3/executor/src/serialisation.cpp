@@ -3,7 +3,7 @@
 #include <stdexcept>
 
 enum class SerialisationType : char {
-    INT, FLOAT, STRING, DICT, SET, LIST
+    INT, FLOAT, STRING, DICT, SET, LIST, BYTES, TRUE, FALSE, NONE
 };
 
 std::pair<ObjectRef, unsigned int> deserialise(std::basic_string<unsigned char> bytes, unsigned int pos) {
@@ -30,6 +30,22 @@ std::pair<ObjectRef, unsigned int> deserialise(std::basic_string<unsigned char> 
                 pos = new_pos;
             }
             return {std::make_shared<List>(objs), pos};
+        }
+        case SerialisationType::DICT: {
+            auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
+            ObjectRefMap objs;
+            pos += 5;
+            for (auto i = 0u; i < len; ++i) {
+                auto [key, new_pos] = deserialise(bytes, pos);
+                auto [value, new_pos2] = deserialise(bytes, new_pos);
+                objs[key] = value;
+                pos = new_pos2;
+            }
+            return {std::make_shared<Dict>(objs), pos};
+        }
+        case SerialisationType::BYTES: {
+            auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
+            return {std::make_shared<Bytes>(bytes.substr(pos + 5, len)), pos + 5 + len};
         }
         default: {
             throw std::runtime_error("Unknown serialisation type");

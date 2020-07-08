@@ -134,6 +134,23 @@ String::String(std::string v) : Object(string_type), value(v) {
 std::string String::to_str() {
     return value;
 }
+auto bytes_type = std::make_shared<Type>(Type::attrmap{
+    {"+", std::make_shared<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
+    {"*", std::make_shared<BuiltinFunction>([](std::string a, int b) {
+        std::string res(a.size() * std::max(0, b), '\0');
+        for (auto i = 0; i < b; ++i) {
+            res.replace(i * a.size(), a.size(), a);
+        }
+        return res;
+    })}
+});
+
+Bytes::Bytes(std::basic_string<unsigned char> v) : Object(bytes_type), value(v) {
+}
+
+std::string Bytes::to_str() {
+    return "Bytes";
+}
 
 auto bound_method_type = std::make_shared<Type>();
 

@@ -3,7 +3,7 @@ import struct
 
 
 class Type(enum.Enum):
-    int, float, string, dict, set, list = range(6)
+    int, float, string, dict, set, list, bytes, true, false, none = range(10)
 
 
 def serialise(obj):
@@ -19,6 +19,14 @@ def serialise(obj):
         return struct.pack("<BI", Type.set.value, len(obj)) + b"".join(serialise(x) for x in obj)
     elif isinstance(obj, list):
         return struct.pack("<BI", Type.list.value, len(obj)) + b"".join(serialise(x) for x in obj)
+    elif isinstance(obj, bytes):
+        return struct.pack("<BI", Type.bytes.value, len(obj)) + obj
+    elif obj is True:
+        return struct.pack("<B", Type.true.value)
+    elif obj is False:
+        return struct.pack("<B", Type.false.value)
+    elif obj is None:
+        return struct.pack("<B", Type.none.value)
     else:
         raise RuntimeError(f"Can't serialise {type(obj)}")
 
@@ -54,3 +62,12 @@ def deserialise(bytes, pos=0):
             x, pos = deserialise(bytes, pos)
             obj.append(x)
         return obj, pos
+    elif type is Type.bytes:
+        len, = struct.unpack_from("<I", bytes, pos + 1)
+        return bytes[pos + 5:pos + 5 + len], pos + 5 + len
+    elif type is Type.true:
+        return True, pos + 1
+    elif type is Type.false:
+        return False, pos + 1
+    elif type is Type.none:
+        return None, pos + 1

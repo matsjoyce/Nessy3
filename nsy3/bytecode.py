@@ -20,14 +20,15 @@ def indent(lst):
 
 
 class BCode:
-    __slots__ = ["type", "arg_v", "subs_v", "pos"]
+    __slots__ = ["type", "arg_v", "subs_v", "pos", "tok"]
     BYTES_PATTERN = struct.Struct("<BI")
 
-    def __init__(self, type, arg_v, subs_v):
+    def __init__(self, type, arg_v, subs_v, tok):
         self.type = type
         self.arg_v = arg_v
         self.subs_v = subs_v
         self.pos = None
+        self.tok = tok
 
     def __repr__(self):
         return f"BCode({self.type}, {self.arg_v})"
@@ -48,7 +49,7 @@ class BCode:
         if not self.subs_v:
             me = self
         else:
-            me = type(self)(self.type, self.arg_v, ())
+            me = type(self)(self.type, self.arg_v, (), self.tok)
         return [z for x in self.subs_v for z in x.linearize()] + ([me] if self.type is not Bytecode.SEQ else [])
 
     def to_bytes(self):
@@ -82,7 +83,7 @@ class BCodeType:
     def __str__(self):
         return self.name
 
-    def __call__(self, *args):
+    def __call__(self, *args, tok=None):
         if self.arg:
             arg_v = args[0]
             subs_v = args[1:]
@@ -92,7 +93,7 @@ class BCodeType:
         else:
             arg_v = None
             subs_v = args
-        return BCode(self, arg_v, subs_v)
+        return BCode(self, arg_v, subs_v, tok)
 
 
 class Seq:
@@ -119,3 +120,4 @@ class Bytecode(metaclass=BCodeMeta):
 
     SEQ = BCodeType(subs=("ops"), emit=False)
     LABEL = BCodeType("id", emit=False)
+    LINENO = BCodeType("lineno", emit=False)

@@ -9,6 +9,14 @@ def indent(stuff):
 
 @dataclasses.dataclass(repr=False)
 class ASTNode:
+    tok: object
+
+    def __post_init__(self):
+        try:
+            self.lineno = self.tok.lineno
+        except KeyError:
+            self.lineno = None
+
     def as_str(self, prefix=""):
         return "\n".join(prefix + "  " * indent + text for indent, text in self.pprint())
 

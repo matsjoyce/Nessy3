@@ -19,7 +19,7 @@ comp_fname = fname.with_suffix(".nsy3c")
 with fname.open() as f:
     a = parser.parse(f.read())
 
-c = compile.compile(a)
+c = compile.compile(a, fname)
 print(c.to_str())
 #sk = skipize.skipize(c)
 #print(sk.to_str())

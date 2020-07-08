@@ -9,7 +9,8 @@
 
 auto code_type = std::make_shared<Type>();
 
-Code::Code(std::basic_string<unsigned char> code, std::vector<ObjectRef> consts) : Object(code_type), code(code), consts(consts) {
+Code::Code(std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab)
+    : Object(code_type), code(code), consts(consts), fname(fname), linenotab(linenotab) {
 }
 
 std::shared_ptr<Code> Code::from_file(std::string fname) {
@@ -25,25 +26,37 @@ std::shared_ptr<Code> Code::from_file(std::string fname) {
         auto x = buffer.str();
         ux = std::basic_string<unsigned char>(reinterpret_cast<unsigned char*>(x.data()), x.size());
     }
-    auto num_consts = *reinterpret_cast<unsigned int*>(ux.data());
-    auto pos = 4u;
-    std::vector<ObjectRef> consts;
-    for (auto i = 0u; i < num_consts; ++i) {
-        auto [obj, new_pos] = deserialise(ux, pos);
-        consts.push_back(obj);
-        pos = new_pos;
-    }
-    return std::make_shared<Code>(ux.substr(pos), consts);
+    auto [header, pos] = deserialise(ux, 0);
+    auto header_map = convert_from_objref<std::map<std::string, ObjectRef>>::convert(header);
+    return std::make_shared<Code>(
+        convert_from_objref<std::basic_string<unsigned char>>::convert(header_map["code"]),
+        convert_from_objref<std::vector<ObjectRef>>::convert(header_map["consts"]),
+        convert_from_objref<std::string>::convert(header_map["fname"]),
+        convert_from_objref<std::basic_string<unsigned char>>::convert(header_map["linenotab"])
+    );
 }
 
 void Code::print() {
+    std::cout << "Compiled from " << fname << std::endl;
     std::cout << "Consts:" << std::endl;
     for (auto i = 0u; i < consts.size(); ++i) {
         std::cout << "  " << i << ": " << consts[i] << std::endl;
     }
     std::cout << std::endl << "Code:" << std::endl;
     unsigned int pos = 0;
+    unsigned int lineno = 0, lineno_bcode_pos = 0;
+    auto linenotab_iter = linenotab.begin();
+    bool lineno_change = false;
     while (pos < code.size()) {
+        lineno_change = false;
+        while (pos >= lineno_bcode_pos + *linenotab_iter && linenotab_iter != linenotab.end()) {
+            lineno_bcode_pos += *linenotab_iter++;
+            lineno += static_cast<signed char>(*linenotab_iter++);
+            lineno_change = true;
+        }
+        if (lineno_change) {
+            std::cout << "Line " << lineno << std::endl;
+        }
         auto op = code[pos];
         auto arg = *reinterpret_cast<unsigned int*>(code.data() + pos + 1);
         std::cout << "  " << pos << ": ";
@@ -69,6 +82,21 @@ void Code::print() {
 std::string Code::to_str() {
     return "Code(?)";
 }
+
+unsigned int Code::lineno_for_position(unsigned int position) {
+    unsigned int lineno = 0, lineno_bcode_pos = 0;
+    auto linenotab_iter = linenotab.begin();
+    while (position >= lineno_bcode_pos + *linenotab_iter && linenotab_iter != linenotab.end()) {
+        lineno_bcode_pos += *linenotab_iter++;
+        lineno += static_cast<signed char>(*linenotab_iter++);
+    }
+    return lineno;
+}
+
+std::string Code::filename() {
+    return fname;
+}
+
 
 std::shared_ptr<Type> Signature::type = std::make_shared<Type>(Type::attrmap{
     {"__new__", std::make_shared<BuiltinFunction>(constructor<Signature, std::vector<std::string>, std::vector<ObjectRef>, unsigned char>())}
@@ -119,7 +147,7 @@ ObjectRef Function::call(const std::vector<ObjectRef>& args) {
     for (; name_iter != signature_->names.end(); ++name_iter) {
         new_env[*name_iter] = signature_->defaults[name_iter - signature_->names.end() + signature_->defaults.size()];
     }
-    return Frame(code, offset, new_env).execute();
+    return std::make_shared<Frame>(code, offset, new_env)->execute();
 }
 
 std::string Function::to_str() {

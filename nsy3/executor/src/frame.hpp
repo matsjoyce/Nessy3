@@ -12,7 +12,7 @@ class Frame : public Object {
     unsigned int position = 0, skip_position = -1, limit = -1;
     std::map<std::string, ObjectRef> env;
     std::vector<std::pair<unsigned char, ObjectRef>> stack;
-    bool generate_return_thunk = false;
+    ObjectRef return_thunk;
 
     void stack_push(unsigned char flags, ObjectRef item, const std::basic_string<unsigned char>& code, const std::vector<ObjectRef>& consts);
 public:

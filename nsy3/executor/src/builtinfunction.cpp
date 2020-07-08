@@ -28,6 +28,13 @@ std::string convert_from_objref<std::string>::convert(const ObjectRef& objref) {
     throw std::runtime_error("Not numeric");
 }
 
+std::basic_string<unsigned char> convert_from_objref<std::basic_string<unsigned char>>::convert(const ObjectRef& objref) {
+    if (auto obj = dynamic_cast<Bytes*>(objref.get())) {
+        return obj->get();
+    }
+    throw std::runtime_error("Not numeric");
+}
+
 ObjectRef convert_from_objref<ObjectRef>::convert(const ObjectRef& objref) {
     return objref;
 }

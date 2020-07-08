@@ -25,14 +25,18 @@ enum class Ops : unsigned char {
 class Code : public Object {
     std::basic_string<unsigned char> code;
     std::vector<ObjectRef> consts;
+    std::string fname;
+    std::basic_string<unsigned char> linenotab;
 
 public:
-    Code(std::basic_string<unsigned char> code, std::vector<ObjectRef> consts);
+    Code(std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab);
     static const unsigned int npos = -1;
     static std::shared_ptr<Code> from_file(std::string fname);
 
     void print();
     std::string to_str() override;
+    unsigned int lineno_for_position(unsigned int position);
+    std::string filename();
 
     friend class Frame;
 };

@@ -80,6 +80,14 @@ public:
     std::string get() const { return value; }
 };
 
+class Bytes : public Object {
+    std::basic_string<unsigned char> value;
+public:
+    Bytes(std::basic_string<unsigned char> v);
+    std::string to_str() override;
+    std::basic_string<unsigned char> get() const { return value; }
+};
+
 class BoundMethod : public Object {
     ObjectRef self, func;
 public:

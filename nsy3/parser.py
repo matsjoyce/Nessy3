@@ -201,11 +201,11 @@ class NSY2Parser(Parser):
 
     @_("NEWLINE")
     def initial(self, p):
-        return ast.Block([])
+        return ast.Block(p, [])
 
     @_("stmts")
     def initial(self, p):
-        return ast.Block(p.stmts)
+        return ast.Block(p, p.stmts)
 
     @_("stmt")
     def stmts(self, p):
@@ -225,11 +225,11 @@ class NSY2Parser(Parser):
 
     @_("NAME EQ expr")
     def simple_stmt(self, p):
-        return ast.AssignStmt(p.NAME, p.expr)
+        return ast.AssignStmt(p, p.NAME, p.expr)
 
     @_("expr")
     def simple_stmt(self, p):
-        return ast.ExprStmt(p.expr)
+        return ast.ExprStmt(p, p.expr)
 
     #@_("NAME EQ expr SEMI")
     #def stmt(self, p):
@@ -237,11 +237,11 @@ class NSY2Parser(Parser):
 
     @_("IF expr block if_trailer")
     def stmt(self, p):
-        return ast.IfStmt(p.expr, p.block, p.if_trailer)
+        return ast.IfStmt(p, p.expr, p.block, p.if_trailer)
 
     @_("")
     def if_trailer(self, p):
-        return ast.Pass()
+        return ast.Pass(p)
 
     @_("ELSE block")
     def if_trailer(self, p):
@@ -249,43 +249,43 @@ class NSY2Parser(Parser):
 
     @_("ELIF expr block if_trailer")
     def if_trailer(self, p):
-        return ast.IfStmt(p.expr, p.block, p.if_trailer)
+        return ast.IfStmt(p, p.expr, p.block, p.if_trailer)
 
     @_("FOR NAME IN expr block")
     def stmt(self, p):
-        return ast.ForStmt(p.NAME, p.expr, p.block)
+        return ast.ForStmt(p, p.NAME, p.expr, p.block)
 
     @_("WHILE expr block")
     def stmt(self, p):
-        return ast.WhileStmt(p.expr, p.block)
+        return ast.WhileStmt(p, p.expr, p.block)
 
     @_("PASS")
     def simple_stmt(self, p):
-        return ast.Pass()
+        return ast.Pass(p)
 
     @_("CONTINUE")
     def simple_stmt(self, p):
-        return ast.Continue()
+        return ast.Continue(p)
 
     @_("BREAK")
     def simple_stmt(self, p):
-        return ast.Break()
+        return ast.Break(p)
 
     @_("RETURN expr")
     def simple_stmt(self, p):
-        return ast.Return(p.expr)
+        return ast.Return(p, p.expr)
 
     @_("COLON NEWLINE INDENT stmts DEDENT")
     def block(self, p):
-        return ast.Block(p.stmts)
+        return ast.Block(p, p.stmts)
 
     @_("LAMBDA defargs ARROW expr")
     def expr(self, p):
-        return ast.Func(p.defargs, ast.Return(p.expr))
+        return ast.Func(p, p.defargs, ast.Return(p, p.expr))
 
     @_("DEF NAME LPAREN defargs RPAREN block")
     def stmt(self, p):
-        return ast.AssignStmt(p.NAME, ast.Func(p.defargs, p.block))
+        return ast.AssignStmt(p, p.NAME, ast.Func(p, p.defargs, p.block))
 
     @_("LPAREN expr RPAREN")
     def expr(self, p):
@@ -293,23 +293,23 @@ class NSY2Parser(Parser):
 
     @_("NAME")
     def expr(self, p):
-        return ast.Name(p.NAME)
+        return ast.Name(p, p.NAME)
 
     @_("expr LPAREN args RPAREN")
     def expr(self, p):
-        return ast.Call(p.expr, p.args)
+        return ast.Call(p, p.expr, p.args)
 
     @_("NUMBER")
     def expr(self, p):
-        return ast.Literal(p.NUMBER)
+        return ast.Literal(p, p.NUMBER)
 
     @_("STRING")
     def expr(self, p):
-        return ast.Literal(p.STRING)
+        return ast.Literal(p, p.STRING)
 
     @_("TRUE", "FALSE")
     def expr(self, p):
-        return ast.Literal(p[0] == "true")
+        return ast.Literal(p, p[0] == "true")
 
     @_(
         # Arith
@@ -334,7 +334,7 @@ class NSY2Parser(Parser):
         "expr OR expr"
     )
     def expr(self, p):
-        return ast.Binop(p[1], p.expr0, p.expr1)
+        return ast.Binop(p, p[1], p.expr0, p.expr1)
 
     @_(
         # Arith
@@ -344,16 +344,16 @@ class NSY2Parser(Parser):
         "NOT expr",
     )
     def expr(self, p):
-        return ast.Monop(p[0], p.expr)
+        return ast.Monop(p, p[0], p.expr)
 
 
     @_("expr LBRAK expr RBRAK")
     def expr(self, p):
-        return ast.Binop("[]", p.expr0, p.expr1)
+        return ast.Binop(p, "[]", p.expr0, p.expr1)
 
     @_("expr DOT NAME")
     def expr(self, p):
-        return ast.Binop(".", p.expr, p.NAME)
+        return ast.Binop(p, ".", p.expr, p.NAME)
 
     @_(
         # Arith
@@ -366,7 +366,7 @@ class NSY2Parser(Parser):
         "NAME STARSTAREQ expr",
     )
     def simple_stmt(self, p):
-        return ast.AssignStmt(p[0], ast.Call(ast.Name(p[1][:-1]), [ast.Name(p[0]), p.expr]))
+        return ast.AssignStmt(p, p[0], ast.Call(p, ast.Name(p, p[1][:-1]), [ast.Name(p, p[0]), p.expr]))
 
     @_(
         # Arith
@@ -408,7 +408,7 @@ class NSY2Parser(Parser):
 
     @_("dflags AT NAME")
     def dflags(self, p):
-        return p.dflags + [ast.Literal(p.NAME)]
+        return p.dflags + [ast.Literal(p, p.NAME)]
 
     @_("")
     def args(self, p):
@@ -452,11 +452,11 @@ class NSY2Parser(Parser):
 
     @_("LBRAK seq RBRAK")
     def expr(self, p):
-        return ast.SequenceLiteral("[]", p.seq)
+        return ast.SequenceLiteral(p, "[]", p.seq)
 
     @_("LCURLY seq RCURLY")
     def expr(self, p):
-        return ast.SequenceLiteral("{}", p.seq)
+        return ast.SequenceLiteral(p, "{}", p.seq)
 
     @_("")
     def seq(self, p):

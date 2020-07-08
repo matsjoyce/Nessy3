@@ -6,7 +6,8 @@ from .bytecode import Bytecode
 
 
 class CompiledCode:
-    def __init__(self):
+    def __init__(self, fname):
+        self.fname = fname
         self.counter = itertools.count()
         self.variables = {}
         self.globals = {}
@@ -52,12 +53,44 @@ class CompiledCode:
         self.functions.append(Bytecode.SEQ(label, code))
         return label
 
+    def create_linenotab(self, ops):
+        lineno = pos = 0
+        transitions = []
+        for op in ops:
+            if op.type == Bytecode.LINENO and op.arg_v != lineno:
+                transitions.append((op.pos - pos, op.arg_v - lineno))
+                lineno = op.arg_v
+                pos = op.pos
+        linenotab = bytearray()
+        for num_bcode, num_lines in transitions:
+            while num_bcode > 255:
+                linenotab.append(255)
+                linenotab.append(0)
+                num_bcode -= 255
+            while num_lines > 127:
+                linenotab.append(0)
+                linenotab.append(127)
+                num_lines -= 127
+            while num_lines < -128:
+                linenotab.append(0)
+                linenotab.append((-128) % 256)
+                num_lines += 128
+            linenotab.append(num_bcode)
+            linenotab.append(num_lines % 256)
+        print(linenotab)
+        return bytes(linenotab)
+
     def to_bytes(self):
         full_code = Bytecode.SEQ(self.code, *self.functions)
         full_code.resolve_labels()
-        consts = struct.pack("<I", len(self.consts)) + b"".join(serialisation.serialise(c.pos if isinstance(c, bytecode.BCode) else c) for c in self.consts)
-        bcode = b"".join(full_code.to_bytes())
-        return consts + bcode
+        linenotab = self.create_linenotab(full_code.linearize())
+        full_code.resolve_labels()
+        return serialisation.serialise({
+            "consts": [(c.pos if isinstance(c, bytecode.BCode) else c) for c in self.consts],
+            "fname": str(self.fname.resolve()),
+            "linenotab": linenotab,
+            "code": b"".join(full_code.to_bytes())
+        })
 
     def to_str(self):
         stuff = ["Consts:", str(self.consts), "", "Code:", self.code.to_str()]
@@ -66,16 +99,20 @@ class CompiledCode:
         return "\n".join(stuff)
 
 
-def compile_expr(a, ctx):
+def compile_expr_iter(a, ctx):
+    print(a)
+    if a.lineno:
+        yield Bytecode.LINENO(a.lineno)
     if isinstance(a, ast.Binop):
         if a.op in ["and", "or"]:
             # Short circuiting
             return ...
         elif a.op == ".":
-            return Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.right))
-        return Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.op)), compile_expr(a.right, ctx))
+            yield Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.right))
+            return
+        yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.op)), compile_expr(a.right, ctx))
     elif isinstance(a, ast.Monop):
-        return Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.value, ctx), ctx.const("unary_" + a.op)))
+        yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.value, ctx), ctx.const("unary_" + a.op)))
     elif isinstance(a, ast.Call):
         args = []
         for arg in a.args:
@@ -83,15 +120,15 @@ def compile_expr(a, ctx):
                 args.append(Bytecode.KWARG(ctx.const(arg[0], wrap=False), compile_expr(arg[1], ctx)))
             else:
                 args.append(compile_expr(arg, ctx))
-        return Bytecode.CALL(compile_expr(a.func, ctx), *args)
+        yield Bytecode.CALL(compile_expr(a.func, ctx), *args)
     elif isinstance(a, ast.Literal):
-        return ctx.const(a.value)
+        yield ctx.const(a.value)
     elif isinstance(a, ast.SequenceLiteral):
-        return Bytecode.CALL(Bytecode.GET(ctx.const(a.type, wrap=False)), *[compile_expr(s, ctx) for s in a.seq])
+        yield Bytecode.CALL(Bytecode.GET(ctx.const(a.type, wrap=False)), *[compile_expr(s, ctx) for s in a.seq])
     elif isinstance(a, ast.Name):
-        return Bytecode.GET(ctx.const(a.name, wrap=False))
+        yield Bytecode.GET(ctx.const(a.name, wrap=False))
     elif isinstance(a, ast.Func):
-        func_label = ctx.add_function(Bytecode.SEQ(*list(compile_stmt(a.stmt, ctx)), Bytecode.RETURN(ctx.const(0))))
+        func_label = ctx.add_function(Bytecode.SEQ(Bytecode.LINENO(a.lineno), *list(compile_stmt(a.stmt, ctx)), Bytecode.RETURN(ctx.const(0))))
         arg_names = []
         defaults = []
         for arg in a.args:
@@ -100,13 +137,21 @@ def compile_expr(a, ctx):
                 defaults.append(compile_expr(arg[1], ctx))
         defaults_expr = Bytecode.CALL(Bytecode.GET(ctx.const("[]", wrap=False)), *defaults)
         signature = Bytecode.CALL(Bytecode.GET(ctx.const("Signature", wrap=False)), ctx.const(arg_names), defaults_expr, ctx.const(0))
-        return Bytecode.CALL(Bytecode.GET(ctx.const("->", wrap=False)), Bytecode.GET(ctx.const("__code__", wrap=False)), ctx.const(func_label), signature, Bytecode.GETENV())
+        yield Bytecode.CALL(Bytecode.GET(ctx.const("->", wrap=False)), Bytecode.GET(ctx.const("__code__", wrap=False)), ctx.const(func_label), signature, Bytecode.GETENV())
     else:
         raise RuntimeError(f"Cannot compile {type(a)} to IR.")
-    return i
+
+
+def compile_expr(*args, **kwargs):
+    instrs = list(compile_expr_iter(*args, **kwargs))
+    if len(instrs) == 1:
+        return instrs[0]
+    return Bytecode.SEQ(*instrs)
 
 
 def compile_stmt(a, ctx):
+    if a.lineno:
+        yield Bytecode.LINENO(a.lineno)
     print(a)
     if isinstance(a, ast.Pass):
         return
@@ -163,7 +208,7 @@ def compile_stmt(a, ctx):
         raise RuntimeError(f"Cannot compile {type(a)} to IR.")
 
 
-def compile(a):
-    ctx = CompiledCode()
+def compile(a, fname):
+    ctx = CompiledCode(fname)
     ctx.code = Bytecode.SEQ(*list(compile_stmt(a, ctx)), Bytecode.RETURN(ctx.const(0)))
     return ctx
