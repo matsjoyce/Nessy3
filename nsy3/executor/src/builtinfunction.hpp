@@ -42,13 +42,12 @@ template<class T> struct FunctionHolder<T, const std::vector<ObjectRef>&> : publ
     ObjectRef call(const std::vector<ObjectRef>& args) { return convert_to_objref<T>::convert(f(args)); }
 };
 
-extern std::shared_ptr<Type> builtin_function_type;
-
 class BuiltinFunction : public Object {
     std::unique_ptr<AbstractFunctionHolder> func;
 public:
-    template<class F> BuiltinFunction(F f) : Object(builtin_function_type), func(new FunctionHolder(std::function(f))) {}
+    template<class F> BuiltinFunction(TypeRef type, F f) : Object(type), func(new FunctionHolder(std::function(f))) {}
     std::string to_str() override { return "BF"; }
+    static TypeRef type;
     ObjectRef call(const std::vector<ObjectRef>& args) override { return func->call(args); }
 };
 
@@ -115,7 +114,7 @@ template<class T> struct convert_to_objref<std::shared_ptr<T>> {
 // Deduction helpers
 
 template<class T, class... Args> std::function<std::shared_ptr<T>(Args...)> constructor() {
-    return {std::make_shared<T, Args...>};
+    return {create<T, Args...>};
 }
 
 template<class T, class R, class... Args> std::function<R(T*, Args...)> method(R(T::*meth)(Args...)) {

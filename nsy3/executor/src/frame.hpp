@@ -16,8 +16,9 @@ class Frame : public Object {
 
     void stack_push(unsigned char flags, ObjectRef item, const std::basic_string<unsigned char>& code, const std::vector<ObjectRef>& consts);
 public:
-    Frame(std::shared_ptr<Code> code, int offset, std::map<std::string, ObjectRef> env);
+    Frame(TypeRef type, std::shared_ptr<Code> code, int offset, std::map<std::string, ObjectRef> env);
     std::string to_str() override;
+    static TypeRef type;
 
     ObjectRef execute();
     void set_env(std::string name, ObjectRef value);
@@ -30,14 +31,14 @@ public:
 class ExecutionThunk : public Thunk {
     std::shared_ptr<Frame> frame;
 public:
-    ExecutionThunk(std::shared_ptr<Frame> frame);
+    ExecutionThunk(TypeRef type, std::shared_ptr<Frame> frame);
     void notify(ObjectRef obj) override;
 };
 
 class NameExtractThunk : public Thunk {
     std::string name;
 public:
-    NameExtractThunk(std::string name);
+    NameExtractThunk(TypeRef type, std::string name);
     void notify(ObjectRef obj) override;
 };
 

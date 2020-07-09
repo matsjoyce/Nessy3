@@ -26,9 +26,9 @@ enable_cxx_compiler_flag_if_supported("-pedantic")
 enable_cxx_compiler_flag_if_supported("-fdiagnostics-color=always")
 
 add_library(libexecutor SHARED
+            src/object.cpp
             src/bytecode.cpp
             src/frame.cpp
-            src/object.cpp
             src/serialisation.cpp
             src/builtinfunction.cpp
             src/builtins.cpp

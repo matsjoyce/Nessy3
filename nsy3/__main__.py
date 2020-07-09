@@ -21,6 +21,7 @@ with fname.open() as f:
 
 c = compile.compile(a, fname)
 print(c.to_str())
+
 #sk = skipize.skipize(c)
 #print(sk.to_str())
 
@@ -29,6 +30,8 @@ if args["--noexec"]:
 
 with comp_fname.open("wb") as f:
     f.write(c.to_bytes())
+
+print("Running executor...")
 
 proc = subprocess.run([EXECUTOR, comp_fname])
 if proc.returncode:

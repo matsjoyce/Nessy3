@@ -29,12 +29,13 @@ class Code : public Object {
     std::basic_string<unsigned char> linenotab;
 
 public:
-    Code(std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab);
+    Code(TypeRef type, std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab);
     static const unsigned int npos = -1;
     static std::shared_ptr<Code> from_file(std::string fname);
 
     void print();
     std::string to_str() override;
+    static TypeRef type;
     unsigned int lineno_for_position(unsigned int position);
     std::string filename();
 
@@ -46,9 +47,9 @@ class Signature : public Object {
     std::vector<ObjectRef> defaults;
     unsigned char flags;
 public:
-    Signature(std::vector<std::string> names, std::vector<ObjectRef> defaults, unsigned char flags);
+    Signature(TypeRef type, std::vector<std::string> names, std::vector<ObjectRef> defaults, unsigned char flags);
     std::string to_str() override;
-    static std::shared_ptr<Type> type;
+    static TypeRef type;
 
     enum : char {
         VARARGS,
@@ -64,9 +65,10 @@ class Function : public Object {
     std::shared_ptr<Signature> signature_;
     std::map<std::string, ObjectRef> env;
 public:
-    Function(std::shared_ptr<Code> code, int offset, std::shared_ptr<Signature> signature, std::map<std::string, ObjectRef> env);
+    Function(TypeRef type, std::shared_ptr<Code> code, int offset, std::shared_ptr<Signature> signature, std::map<std::string, ObjectRef> env);
     ObjectRef call(const std::vector<ObjectRef>& args) override;
     std::string to_str() override;
+    static TypeRef type;
     std::shared_ptr<Signature> signature() { return signature_; }
 };
 

@@ -5,9 +5,9 @@
 #include <stdexcept>
 #include <iostream>
 
-auto frame_type = std::make_shared<Type>();
+TypeRef Frame::type = create<Type>();
 
-Frame::Frame(std::shared_ptr<Code> code, int offset, std::map<std::string, ObjectRef> env) : Object(frame_type), code(code), position(offset), env(env) {
+Frame::Frame(TypeRef type, std::shared_ptr<Code> code, int offset, std::map<std::string, ObjectRef> env) : Object(type), code(code), position(offset), env(env) {
     this->env["__code__"] = code;
     if (!this->env.count("__exec__")) {
         throw std::runtime_error("No execution engine");
@@ -33,11 +33,11 @@ void Frame::set_env(std::string name, ObjectRef value) {
 void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_string<unsigned char>& code, const std::vector<ObjectRef>& consts) {
     if (auto thunk = dynamic_cast<Thunk*>(item.get())) {
         if (skip_position) {
-            auto subframe = std::make_shared<Frame>(this->code, position, env);
+            auto subframe = create<Frame>(this->code, position, env);
             subframe->limit = skip_position;
             std::swap(stack, subframe->stack);
 
-            auto exec_thunk = std::make_shared<ExecutionThunk>(subframe);
+            auto exec_thunk = create<ExecutionThunk>(subframe);
             thunk->subscribe(exec_thunk);
             // Exploit the fact that skip_pos > pos and that nothing is going to jump out of that range to find all of the sets.
             for (; position < skip_position; position += 5) {
@@ -47,7 +47,7 @@ void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_str
                     if (!name) {
                         throw std::runtime_error("Bad name for set");
                     }
-                    auto name_thunk = std::make_shared<NameExtractThunk>(name->get());
+                    auto name_thunk = create<NameExtractThunk>(name->get());
                     exec_thunk->subscribe(name_thunk);
                     env[name->get()] = name_thunk;
                 }
@@ -57,8 +57,8 @@ void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_str
         else {
             limit = position;
             std::cout << "RETURN THUNK" << std::endl;
-            auto exec_thunk = std::make_shared<ExecutionThunk>(std::dynamic_pointer_cast<Frame>(shared_from_this()));
-            auto name_thunk = std::make_shared<NameExtractThunk>("return");
+            auto exec_thunk = create<ExecutionThunk>(std::dynamic_pointer_cast<Frame>(shared_from_this()));
+            auto name_thunk = create<NameExtractThunk>("return");
             exec_thunk->subscribe(name_thunk);
             thunk->subscribe(exec_thunk);
             return_thunk = name_thunk;
@@ -154,9 +154,9 @@ ObjectRef Frame::execute() {
             case Ops::GETENV: {
                 ObjectRefMap env_copy;
                 for (auto item : env) {
-                    env_copy[std::make_shared<String>(item.first)] = item.second;
+                    env_copy[create<String>(item.first)] = item.second;
                 }
-                stack.emplace_back(std::make_pair(0, std::make_shared<Dict>(env_copy)));
+                stack.emplace_back(std::make_pair(0, create<Dict>(env_copy)));
                 break;
             }
             case Ops::SETSKIP: {
@@ -172,7 +172,7 @@ ObjectRef Frame::execute() {
     return return_thunk;
 }
 
-ExecutionThunk::ExecutionThunk(std::shared_ptr<Frame> frame) : frame(frame) {
+ExecutionThunk::ExecutionThunk(TypeRef type, std::shared_ptr<Frame> frame) : Thunk(type), frame(frame) {
 }
 
 void ExecutionThunk::notify(ObjectRef obj) {
@@ -185,7 +185,7 @@ void ExecutionThunk::notify(ObjectRef obj) {
     finalize(frame);
 }
 
-NameExtractThunk::NameExtractThunk(std::string name) : name(name) {
+NameExtractThunk::NameExtractThunk(TypeRef type, std::string name) : Thunk(type), name(name) {
 }
 
 void NameExtractThunk::notify(ObjectRef obj) {

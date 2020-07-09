@@ -5,22 +5,29 @@
 #include <sstream>
 #include <iostream>
 
+std::vector<std::pair<std::weak_ptr<Object>, TypeRef*>> untyped_objects;
+
 std::ostream& operator<<(std::ostream& s, const ObjectRef& obj) {
-    s << obj->to_str();
+    if (!obj) {
+        s << "NULL OBJECT!!!";
+    }
+    else {
+        s << obj->to_str();
+    }
     return s;
 }
 
-Object::Object(std::shared_ptr<Type> type) : type_(type) {
+Object::Object(TypeRef type) : type_(type) {
 }
 
-ObjectRef Object::type() {
+ObjectRef Object::obj_type() {
     return type_;
 }
 
 ObjectRef Object::getattr(std::string name) {
     auto obj = type_->get(name);
     if (dynamic_cast<BuiltinFunction*>(obj.get())) {
-        return std::make_shared<BoundMethod>(shared_from_this(), obj);
+        return create<BoundMethod>(shared_from_this(), obj);
     }
     if (dynamic_cast<Property*>(obj.get())) {
         return obj->call({shared_from_this()});
@@ -36,12 +43,27 @@ bool Object::to_bool() {
     return true;
 }
 
-
-Type::Type() : Object({}) {
+TypeRef Type::make_type_type() {
+    auto obj = create<Type>();
+    obj->type_ = obj;
+    return obj;
 }
 
+TypeRef Type::type = Type::make_type_type();//create<Type>();
 
-Type::Type(std::map<std::string, ObjectRef> attrs) : Object({}), attrs(attrs) {
+Type::Type(TypeRef type, std::map<std::string, ObjectRef> attrs) : Object(type), attrs(attrs) {
+    for (auto iter = untyped_objects.begin(); iter != untyped_objects.end();) {
+        if (iter->first.expired()) {
+            iter = untyped_objects.erase(iter);
+        }
+        else if (*(iter->second)) {
+            iter->first.lock()->type_ = *(iter->second);
+            iter = untyped_objects.erase(iter);
+        }
+        else {
+            ++iter;
+        }
+    }
 }
 
 std::string Type::to_str() {
@@ -60,24 +82,21 @@ ObjectRef Type::call(const std::vector<ObjectRef>& args) {
     return get("__new__")->call(args);
 }
 
-auto integer_type = std::make_shared<Type>(Type::attrmap{
-    {"+", std::make_shared<BuiltinFunction>([](int a, int b) { return a + b; })},
-    {"-", std::make_shared<BuiltinFunction>([](int a, int b) { return a - b; })},
-    {"*", std::make_shared<BuiltinFunction>([](int a, int b) { return a * b; })},
-    {"/", std::make_shared<BuiltinFunction>([](int a, int b) { return static_cast<double>(a) / b; })},
-    {"//", std::make_shared<BuiltinFunction>([](int a, int b) { return a / b; })},
-    {"%", std::make_shared<BuiltinFunction>([](int a, int b) { auto x = (a % b); return x > 0 ? x : x + b; })},
-    {"==", std::make_shared<BuiltinFunction>([](int a, ObjectRef b) {
+TypeRef Integer::type = create<Type>(Type::attrmap{
+    {"+", create<BuiltinFunction>([](int a, int b) { return a + b; })},
+    {"-", create<BuiltinFunction>([](int a, int b) { return a - b; })},
+    {"*", create<BuiltinFunction>([](int a, int b) { return a * b; })},
+    {"/", create<BuiltinFunction>([](int a, int b) { return static_cast<double>(a) / b; })},
+    {"//", create<BuiltinFunction>([](int a, int b) { return a / b; })},
+    {"%", create<BuiltinFunction>([](int a, int b) { auto x = (a % b); return x > 0 ? x : x + b; })},
+    {"==", create<BuiltinFunction>([](int a, ObjectRef b) {
         if (auto obj = dynamic_cast<Integer*>(b.get())) return a == obj->get();
         return false;
     })},
-    {"<", std::make_shared<BuiltinFunction>([](int a, int b) { return a < b; })},
+    {"<", create<BuiltinFunction>([](int a, int b) { return a < b; })},
 });
 
-Integer::Integer(int v) : Numeric(integer_type), value(v) {
-}
-
-Integer::Integer(std::shared_ptr<Type> type, int v) : Numeric(type), value(v) {
+Integer::Integer(TypeRef type, int v) : Numeric(type), value(v) {
 }
 
 std::string Integer::to_str() {
@@ -88,25 +107,25 @@ bool Integer::to_bool() {
     return value;
 }
 
-auto boolean_type = std::make_shared<Type>();
+TypeRef Boolean::type = create<Type>();
 
-Boolean::Boolean(bool v) : Integer(boolean_type, v) {
+Boolean::Boolean(TypeRef type, bool v) : Integer(type, v) {
 }
 
 std::string Boolean::to_str() {
     return value ? "TRUE" : "FALSE";
 }
 
-auto float_type = std::make_shared<Type>(Type::attrmap{
-    {"+", std::make_shared<BuiltinFunction>([](double a, double b){ return a + b; })},
-    {"-", std::make_shared<BuiltinFunction>([](double a, double b){ return a - b; })},
-    {"*", std::make_shared<BuiltinFunction>([](double a, double b){ return a * b; })},
-    {"/", std::make_shared<BuiltinFunction>([](double a, double b){ return static_cast<double>(a) / b; })},
-    {"//", std::make_shared<BuiltinFunction>([](double a, double b){ return static_cast<int>(a / b); })},
-//     {"%", std::make_shared<BuiltinFunction>([](double a, double b){ auto x = (a % b); return x > 0 ? x : x + b; })}
+TypeRef Float::type = create<Type>(Type::attrmap{
+    {"+", create<BuiltinFunction>([](double a, double b){ return a + b; })},
+    {"-", create<BuiltinFunction>([](double a, double b){ return a - b; })},
+    {"*", create<BuiltinFunction>([](double a, double b){ return a * b; })},
+    {"/", create<BuiltinFunction>([](double a, double b){ return static_cast<double>(a) / b; })},
+    {"//", create<BuiltinFunction>([](double a, double b){ return static_cast<int>(a / b); })},
+//     {"%", create<BuiltinFunction>([](double a, double b){ auto x = (a % b); return x > 0 ? x : x + b; })}
 });
 
-Float::Float(double v) : Numeric(float_type), value(v) {
+Float::Float(TypeRef type, double v) : Numeric(type), value(v) {
 }
 
 std::string Float::to_str() {
@@ -117,9 +136,9 @@ bool Float::to_bool() {
     return value;
 }
 
-auto string_type = std::make_shared<Type>(Type::attrmap{
-    {"+", std::make_shared<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
-    {"*", std::make_shared<BuiltinFunction>([](std::string a, int b) {
+TypeRef String::type = create<Type>(Type::attrmap{
+    {"+", create<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
+    {"*", create<BuiltinFunction>([](std::string a, int b) {
         std::string res(a.size() * std::max(0, b), '\0');
         for (auto i = 0; i < b; ++i) {
             res.replace(i * a.size(), a.size(), a);
@@ -128,15 +147,15 @@ auto string_type = std::make_shared<Type>(Type::attrmap{
     })}
 });
 
-String::String(std::string v) : Object(string_type), value(v) {
+String::String(TypeRef type, std::string v) : Object(type), value(v) {
 }
 
 std::string String::to_str() {
     return value;
 }
-auto bytes_type = std::make_shared<Type>(Type::attrmap{
-    {"+", std::make_shared<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
-    {"*", std::make_shared<BuiltinFunction>([](std::string a, int b) {
+TypeRef Bytes::type = create<Type>(Type::attrmap{
+    {"+", create<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
+    {"*", create<BuiltinFunction>([](std::string a, int b) {
         std::string res(a.size() * std::max(0, b), '\0');
         for (auto i = 0; i < b; ++i) {
             res.replace(i * a.size(), a.size(), a);
@@ -145,16 +164,16 @@ auto bytes_type = std::make_shared<Type>(Type::attrmap{
     })}
 });
 
-Bytes::Bytes(std::basic_string<unsigned char> v) : Object(bytes_type), value(v) {
+Bytes::Bytes(TypeRef type, std::basic_string<unsigned char> v) : Object(type), value(v) {
 }
 
 std::string Bytes::to_str() {
     return "Bytes";
 }
 
-auto bound_method_type = std::make_shared<Type>();
+TypeRef BoundMethod::type = create<Type>();
 
-BoundMethod::BoundMethod(ObjectRef self, ObjectRef func) : Object(bound_method_type), self(self), func(func) {
+BoundMethod::BoundMethod(TypeRef type, ObjectRef self, ObjectRef func) : Object(type), self(self), func(func) {
 }
 
 std::string BoundMethod::to_str() {
@@ -167,9 +186,9 @@ ObjectRef BoundMethod::call(const std::vector<ObjectRef>& args) {
     return func->call(mod_args);
 }
 
-auto property_type = std::make_shared<Type>();
+TypeRef Property::type = create<Type>();
 
-Property::Property(ObjectRef func) : Object(property_type), func(func) {
+Property::Property(TypeRef type, ObjectRef func) : Object(type), func(func) {
 }
 
 std::string Property::to_str() {
@@ -180,9 +199,9 @@ ObjectRef Property::call(const std::vector<ObjectRef>& args) {
     return func->call(args);
 }
 
-auto dict_type = std::make_shared<Type>();
+TypeRef Dict::type = create<Type>();
 
-Dict::Dict(ObjectRefMap v) : Object(dict_type), value(v) {
+Dict::Dict(TypeRef type, ObjectRefMap v) : Object(type), value(v) {
 }
 
 std::string Dict::to_str() {
@@ -200,9 +219,9 @@ std::string Dict::to_str() {
     return ss.str();
 }
 
-auto list_type = std::make_shared<Type>();
+TypeRef List::type = create<Type>();
 
-List::List(std::vector<ObjectRef> v) : Object(list_type), value(v) {
+List::List(TypeRef type, std::vector<ObjectRef> v) : Object(type), value(v) {
 }
 
 std::string List::to_str() {
@@ -220,9 +239,9 @@ std::string List::to_str() {
     return ss.str();
 }
 
-auto thunk_type = std::make_shared<Type>();
+TypeRef Thunk::type = create<Type>();
 
-Thunk::Thunk() : Object(thunk_type) {
+Thunk::Thunk(TypeRef type) : Object(type) {
 }
 
 std::string Thunk::to_str() {

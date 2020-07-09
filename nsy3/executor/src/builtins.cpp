@@ -13,16 +13,16 @@ int print(const std::vector<ObjectRef>& args) {
 }
 
 ObjectRef arrow(std::shared_ptr<Code> code, int offset, std::shared_ptr<Signature> signature, std::map<std::string, ObjectRef> env) {
-    return std::make_shared<Function>(code, offset, signature, env);
+    return create<Function>(code, offset, signature, env);
 }
 
 ObjectRef braks(const std::vector<ObjectRef>& args) {
-    return std::make_shared<List>(args);
+    return create<List>(args);
 }
 
 std::map<std::string, ObjectRef> builtins = {
-    {"print", std::make_shared<BuiltinFunction>(print)},
-    {"->", std::make_shared<BuiltinFunction>(arrow)},
+    {"print", create<BuiltinFunction>(print)},
+    {"->", create<BuiltinFunction>(arrow)},
     {"Signature", Signature::type},
-    {"[]", std::make_shared<BuiltinFunction>(braks)}
+    {"[]", create<BuiltinFunction>(braks)}
 };

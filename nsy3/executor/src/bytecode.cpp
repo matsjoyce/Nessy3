@@ -7,10 +7,10 @@
 #include <sstream>
 #include <iostream>
 
-auto code_type = std::make_shared<Type>();
+TypeRef Code::type = create<Type>();
 
-Code::Code(std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab)
-    : Object(code_type), code(code), consts(consts), fname(fname), linenotab(linenotab) {
+Code::Code(TypeRef type, std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab)
+    : Object(type), code(code), consts(consts), fname(fname), linenotab(linenotab) {
 }
 
 std::shared_ptr<Code> Code::from_file(std::string fname) {
@@ -28,7 +28,7 @@ std::shared_ptr<Code> Code::from_file(std::string fname) {
     }
     auto [header, pos] = deserialise(ux, 0);
     auto header_map = convert_from_objref<std::map<std::string, ObjectRef>>::convert(header);
-    return std::make_shared<Code>(
+    return create<Code>(
         convert_from_objref<std::basic_string<unsigned char>>::convert(header_map["code"]),
         convert_from_objref<std::vector<ObjectRef>>::convert(header_map["consts"]),
         convert_from_objref<std::string>::convert(header_map["fname"]),
@@ -98,11 +98,11 @@ std::string Code::filename() {
 }
 
 
-std::shared_ptr<Type> Signature::type = std::make_shared<Type>(Type::attrmap{
-    {"__new__", std::make_shared<BuiltinFunction>(constructor<Signature, std::vector<std::string>, std::vector<ObjectRef>, unsigned char>())}
+TypeRef Signature::type = create<Type>(Type::attrmap{
+    {"__new__", create<BuiltinFunction>(constructor<Signature, std::vector<std::string>, std::vector<ObjectRef>, unsigned char>())}
 });
 
-Signature::Signature(std::vector<std::string> names, std::vector<ObjectRef> defaults, unsigned char flags)
+Signature::Signature(TypeRef type, std::vector<std::string> names, std::vector<ObjectRef> defaults, unsigned char flags)
     : Object(type), names(names), defaults(defaults), flags(flags) {
 }
 
@@ -127,12 +127,12 @@ std::string Signature::to_str() {
     return "Signature(" + res + ")";
 }
 
-auto function_type = std::make_shared<Type>(Type::attrmap{
-    {"signature", std::make_shared<Property>(std::make_shared<BuiltinFunction>(method(&Function::signature)))}
+TypeRef Function::type = create<Type>(Type::attrmap{
+    {"signature", create<Property>(create<BuiltinFunction>(method(&Function::signature)))}
 });
 
-Function::Function(std::shared_ptr<Code> code, int offset, std::shared_ptr<Signature> signature, std::map<std::string, ObjectRef> env)
-    : Object(function_type), code(code), offset(offset), signature_(signature), env(env) {
+Function::Function(TypeRef type, std::shared_ptr<Code> code, int offset, std::shared_ptr<Signature> signature, std::map<std::string, ObjectRef> env)
+    : Object(type), code(code), offset(offset), signature_(signature), env(env) {
 }
 
 ObjectRef Function::call(const std::vector<ObjectRef>& args) {
@@ -147,7 +147,7 @@ ObjectRef Function::call(const std::vector<ObjectRef>& args) {
     for (; name_iter != signature_->names.end(); ++name_iter) {
         new_env[*name_iter] = signature_->defaults[name_iter - signature_->names.end() + signature_->defaults.size()];
     }
-    return std::make_shared<Frame>(code, offset, new_env)->execute();
+    return create<Frame>(code, offset, new_env)->execute();
 }
 
 std::string Function::to_str() {

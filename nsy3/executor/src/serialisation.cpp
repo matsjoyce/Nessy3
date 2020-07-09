@@ -10,15 +10,15 @@ std::pair<ObjectRef, unsigned int> deserialise(std::basic_string<unsigned char> 
     auto type = static_cast<SerialisationType>(bytes[pos]);
     switch (type) {
         case SerialisationType::INT: {
-            return {std::make_shared<Integer>(*reinterpret_cast<int*>(bytes.data() + pos + 1)), pos + 5};
+            return {create<Integer>(*reinterpret_cast<int*>(bytes.data() + pos + 1)), pos + 5};
         }
         case SerialisationType::FLOAT: {
-            return {std::make_shared<Float>(*reinterpret_cast<double*>(bytes.data() + pos + 1)), pos + 9};
+            return {create<Float>(*reinterpret_cast<double*>(bytes.data() + pos + 1)), pos + 9};
         }
         case SerialisationType::STRING: {
             auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
             auto str = std::string(reinterpret_cast<char*>(bytes.data() + pos + 5), len);
-            return {std::make_shared<String>(str), pos + 5 + len};
+            return {create<String>(str), pos + 5 + len};
         }
         case SerialisationType::LIST: {
             auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
@@ -29,7 +29,7 @@ std::pair<ObjectRef, unsigned int> deserialise(std::basic_string<unsigned char> 
                 objs.push_back(obj);
                 pos = new_pos;
             }
-            return {std::make_shared<List>(objs), pos};
+            return {create<List>(objs), pos};
         }
         case SerialisationType::DICT: {
             auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
@@ -41,11 +41,11 @@ std::pair<ObjectRef, unsigned int> deserialise(std::basic_string<unsigned char> 
                 objs[key] = value;
                 pos = new_pos2;
             }
-            return {std::make_shared<Dict>(objs), pos};
+            return {create<Dict>(objs), pos};
         }
         case SerialisationType::BYTES: {
             auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
-            return {std::make_shared<Bytes>(bytes.substr(pos + 5, len)), pos + 5 + len};
+            return {create<Bytes>(bytes.substr(pos + 5, len)), pos + 5 + len};
         }
         default: {
             throw std::runtime_error("Unknown serialisation type");

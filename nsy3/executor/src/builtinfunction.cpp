@@ -40,23 +40,23 @@ ObjectRef convert_from_objref<ObjectRef>::convert(const ObjectRef& objref) {
 }
 
 ObjectRef convert_to_objref<int>::convert(const int& t) {
-    return std::make_shared<Integer>(t);
+    return create<Integer>(t);
 }
 
 ObjectRef convert_to_objref<bool>::convert(const bool& t) {
-    return std::make_shared<Boolean>(t);
+    return create<Boolean>(t);
 }
 
 ObjectRef convert_to_objref<double>::convert(const double& t) {
-    return std::make_shared<Float>(t);
+    return create<Float>(t);
 }
 
 ObjectRef convert_to_objref<std::string>::convert(const std::string& t) {
-    return std::make_shared<String>(t);
+    return create<String>(t);
 }
 
 ObjectRef convert_to_objref<ObjectRef>::convert(const ObjectRef& t) {
     return t;
 }
 
-std::shared_ptr<Type> builtin_function_type = std::make_shared<Type>();
+TypeRef BuiltinFunction::type = create<Type>();

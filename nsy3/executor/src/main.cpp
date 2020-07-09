@@ -2,10 +2,6 @@
 
 #include "docopt/docopt.h"
 
-#include "bytecode.hpp"
-#include "frame.hpp"
-#include "builtinfunction.hpp"
-#include "builtins.hpp"
 #include "executionengine.hpp"
 
 
@@ -23,16 +19,10 @@ R"(fs
 
 int main(int argc, const char** argv) {
     auto args = docopt::docopt(USAGE, {argv + 1, argv + argc}, true, "executor 0.1");
-
     auto files = args["<files>"].asStringList();
-    auto execengine = std::make_shared<ExecutionEngine>();
+    auto execengine = create<ExecutionEngine>();
     for (auto f : files) {
-        std::cout << f << std::endl;
-        auto c = Code::from_file(f);
-        c->print();
-        auto start_env = builtins;
-        start_env["__exec__"] = execengine;
-        std::make_shared<Frame>(c, 0, start_env)->execute();
+        execengine->exec_file(f);
     }
     execengine->finish();
 
