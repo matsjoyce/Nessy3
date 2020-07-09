@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-TypeRef ExecutionEngine::type = create<Type>(Type::attrmap{
+TypeRef ExecutionEngine::type = create<Type>("ExecutionEngine", Type::attrmap{
     {"test_thunk", create<BuiltinFunction>(method(&ExecutionEngine::test_thunk))}
 });
 

@@ -1,6 +1,7 @@
 #include "builtins.hpp"
 #include "builtinfunction.hpp"
 #include "bytecode.hpp"
+#include "exception.hpp"
 #include <iostream>
 
 int print(const std::vector<ObjectRef>& args) {
@@ -24,5 +25,6 @@ std::map<std::string, ObjectRef> builtins = {
     {"print", create<BuiltinFunction>(print)},
     {"->", create<BuiltinFunction>(arrow)},
     {"Signature", Signature::type},
-    {"[]", create<BuiltinFunction>(braks)}
+    {"[]", create<BuiltinFunction>(braks)},
+    {"make_err", create<BuiltinFunction>([]() -> int { throw static_cast<ObjectRef>(create<NameException>("An error.")); })}
 };

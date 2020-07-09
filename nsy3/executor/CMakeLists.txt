@@ -33,6 +33,7 @@ add_library(libexecutor SHARED
             src/builtinfunction.cpp
             src/builtins.cpp
             src/executionengine.cpp
+            src/exception.cpp
 )
 target_link_libraries(libexecutor docopt)
 

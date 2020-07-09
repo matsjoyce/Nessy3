@@ -1,11 +1,12 @@
 #include "frame.hpp"
 
 #include "builtinfunction.hpp"
+#include "exception.hpp"
 
 #include <stdexcept>
 #include <iostream>
 
-TypeRef Frame::type = create<Type>();
+TypeRef Frame::type = create<Type>("Frame");
 
 Frame::Frame(TypeRef type, std::shared_ptr<Code> code, int offset, std::map<std::string, ObjectRef> env) : Object(type), code(code), position(offset), env(env) {
     this->env["__code__"] = code;
@@ -21,7 +22,7 @@ std::string Frame::to_str() {
 ObjectRef Frame::get_env(std::string name) {
     auto iter = env.find(name);
     if (iter == env.end()) {
-        throw std::runtime_error("No such var");
+        throw create<NameException>("Name '" + name + "' is not defined");
     }
     return iter->second;
 }
@@ -45,7 +46,7 @@ void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_str
                     auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
                     auto name = dynamic_cast<String*>(consts[arg].get());
                     if (!name) {
-                        throw std::runtime_error("Bad name for set");
+                        throw create<TypeException>("Name must be a string");
                     }
                     auto name_thunk = create<NameExtractThunk>(name->get());
                     exec_thunk->subscribe(name_thunk);
@@ -87,7 +88,7 @@ ObjectRef Frame::execute() {
                 stack.pop_back();
                 auto name = dynamic_cast<String*>(nameobj.get());
                 if (!name) {
-                    throw std::runtime_error("Bad name for getattr");
+                    throw create<TypeException>("Attribute must be a string");
                 }
                 auto obj = stack.back().second;
                 stack.pop_back();
@@ -109,7 +110,7 @@ ObjectRef Frame::execute() {
             case Ops::GET: {
                 auto name = dynamic_cast<String*>(consts[arg].get());
                 if (!name) {
-                    throw std::runtime_error("Bad name for get");
+                    throw create<TypeException>("Name must be a string");
                 }
                 stack_push(0, get_env(name->get()), code, consts);
                 break;
@@ -117,7 +118,7 @@ ObjectRef Frame::execute() {
             case Ops::SET: {
                 auto name = dynamic_cast<String*>(consts[arg].get());
                 if (!name) {
-                    throw std::runtime_error("Bad name for set");
+                    throw create<TypeException>("Name must be a string");
                 }
                 env[name->get()] = stack.back().second;
                 stack.pop_back();

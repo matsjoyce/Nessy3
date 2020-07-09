@@ -7,7 +7,7 @@
 #include <sstream>
 #include <iostream>
 
-TypeRef Code::type = create<Type>();
+TypeRef Code::type = create<Type>("Code");
 
 Code::Code(TypeRef type, std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab)
     : Object(type), code(code), consts(consts), fname(fname), linenotab(linenotab) {
@@ -98,7 +98,7 @@ std::string Code::filename() {
 }
 
 
-TypeRef Signature::type = create<Type>(Type::attrmap{
+TypeRef Signature::type = create<Type>("Signature", Type::attrmap{
     {"__new__", create<BuiltinFunction>(constructor<Signature, std::vector<std::string>, std::vector<ObjectRef>, unsigned char>())}
 });
 
@@ -127,7 +127,7 @@ std::string Signature::to_str() {
     return "Signature(" + res + ")";
 }
 
-TypeRef Function::type = create<Type>(Type::attrmap{
+TypeRef Function::type = create<Type>("Function", Type::attrmap{
     {"signature", create<Property>(create<BuiltinFunction>(method(&Function::signature)))}
 });
 

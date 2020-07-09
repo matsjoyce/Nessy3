@@ -19,10 +19,10 @@ class Object : public std::enable_shared_from_this<Object> {
 public:
     Object(TypeRef type);
     virtual ~Object() = default;
-    virtual std::string to_str() = 0;
+    virtual std::string to_str();
     virtual bool to_bool();
 //     virtual std::size_t hash();
-    ObjectRef obj_type();
+    TypeRef obj_type();
     ObjectRef getattr(std::string name);
     virtual ObjectRef call(const std::vector<ObjectRef>& args);
 
@@ -40,14 +40,16 @@ template<class T, class... Args> std::shared_ptr<T> create(Args... args) {
 std::ostream& operator<<(std::ostream& s, const ObjectRef& obj);
 
 class Type : public Object {
+    std::string name_;
     std::map<std::string, ObjectRef> attrs;
     static TypeRef make_type_type();
 public:
-    Type(TypeRef type, std::map<std::string, ObjectRef> attr={});
+    Type(TypeRef type, std::string name, std::map<std::string, ObjectRef> attr={});
     std::string to_str() override;
     static TypeRef type;
     ObjectRef get(std::string name);
     ObjectRef call(const std::vector<ObjectRef>& args) override;
+    std::string name() const { return name_; }
 
     using attrmap = std::map<std::string, ObjectRef>;
 };

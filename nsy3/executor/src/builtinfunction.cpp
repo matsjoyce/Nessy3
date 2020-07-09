@@ -59,4 +59,4 @@ ObjectRef convert_to_objref<ObjectRef>::convert(const ObjectRef& t) {
     return t;
 }
 
-TypeRef BuiltinFunction::type = create<Type>();
+TypeRef BuiltinFunction::type = create<Type>("BuiltinFunction");

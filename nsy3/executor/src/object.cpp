@@ -20,7 +20,12 @@ std::ostream& operator<<(std::ostream& s, const ObjectRef& obj) {
 Object::Object(TypeRef type) : type_(type) {
 }
 
-ObjectRef Object::obj_type() {
+std::string Object::to_str() {
+    return type_->name() + "(?)";
+}
+
+TypeRef Object::obj_type()
+{
     return type_;
 }
 
@@ -44,14 +49,14 @@ bool Object::to_bool() {
 }
 
 TypeRef Type::make_type_type() {
-    auto obj = create<Type>();
+    auto obj = create<Type>("Type");
     obj->type_ = obj;
     return obj;
 }
 
 TypeRef Type::type = Type::make_type_type();//create<Type>();
 
-Type::Type(TypeRef type, std::map<std::string, ObjectRef> attrs) : Object(type), attrs(attrs) {
+Type::Type(TypeRef type, std::string name, std::map<std::string, ObjectRef> attrs) : Object(type), name_(name), attrs(attrs) {
     for (auto iter = untyped_objects.begin(); iter != untyped_objects.end();) {
         if (iter->first.expired()) {
             iter = untyped_objects.erase(iter);
@@ -82,7 +87,7 @@ ObjectRef Type::call(const std::vector<ObjectRef>& args) {
     return get("__new__")->call(args);
 }
 
-TypeRef Integer::type = create<Type>(Type::attrmap{
+TypeRef Integer::type = create<Type>("Integer", Type::attrmap{
     {"+", create<BuiltinFunction>([](int a, int b) { return a + b; })},
     {"-", create<BuiltinFunction>([](int a, int b) { return a - b; })},
     {"*", create<BuiltinFunction>([](int a, int b) { return a * b; })},
@@ -107,7 +112,7 @@ bool Integer::to_bool() {
     return value;
 }
 
-TypeRef Boolean::type = create<Type>();
+TypeRef Boolean::type = create<Type>("Boolean");
 
 Boolean::Boolean(TypeRef type, bool v) : Integer(type, v) {
 }
@@ -116,7 +121,7 @@ std::string Boolean::to_str() {
     return value ? "TRUE" : "FALSE";
 }
 
-TypeRef Float::type = create<Type>(Type::attrmap{
+TypeRef Float::type = create<Type>("Float", Type::attrmap{
     {"+", create<BuiltinFunction>([](double a, double b){ return a + b; })},
     {"-", create<BuiltinFunction>([](double a, double b){ return a - b; })},
     {"*", create<BuiltinFunction>([](double a, double b){ return a * b; })},
@@ -136,7 +141,7 @@ bool Float::to_bool() {
     return value;
 }
 
-TypeRef String::type = create<Type>(Type::attrmap{
+TypeRef String::type = create<Type>("String", Type::attrmap{
     {"+", create<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
     {"*", create<BuiltinFunction>([](std::string a, int b) {
         std::string res(a.size() * std::max(0, b), '\0');
@@ -153,7 +158,7 @@ String::String(TypeRef type, std::string v) : Object(type), value(v) {
 std::string String::to_str() {
     return value;
 }
-TypeRef Bytes::type = create<Type>(Type::attrmap{
+TypeRef Bytes::type = create<Type>("Bytes", Type::attrmap{
     {"+", create<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
     {"*", create<BuiltinFunction>([](std::string a, int b) {
         std::string res(a.size() * std::max(0, b), '\0');
@@ -171,7 +176,7 @@ std::string Bytes::to_str() {
     return "Bytes";
 }
 
-TypeRef BoundMethod::type = create<Type>();
+TypeRef BoundMethod::type = create<Type>("BoundMethod");
 
 BoundMethod::BoundMethod(TypeRef type, ObjectRef self, ObjectRef func) : Object(type), self(self), func(func) {
 }
@@ -186,7 +191,7 @@ ObjectRef BoundMethod::call(const std::vector<ObjectRef>& args) {
     return func->call(mod_args);
 }
 
-TypeRef Property::type = create<Type>();
+TypeRef Property::type = create<Type>("Property");
 
 Property::Property(TypeRef type, ObjectRef func) : Object(type), func(func) {
 }
@@ -199,7 +204,7 @@ ObjectRef Property::call(const std::vector<ObjectRef>& args) {
     return func->call(args);
 }
 
-TypeRef Dict::type = create<Type>();
+TypeRef Dict::type = create<Type>("Dict");
 
 Dict::Dict(TypeRef type, ObjectRefMap v) : Object(type), value(v) {
 }
@@ -219,7 +224,7 @@ std::string Dict::to_str() {
     return ss.str();
 }
 
-TypeRef List::type = create<Type>();
+TypeRef List::type = create<Type>("List");
 
 List::List(TypeRef type, std::vector<ObjectRef> v) : Object(type), value(v) {
 }
@@ -239,7 +244,7 @@ std::string List::to_str() {
     return ss.str();
 }
 
-TypeRef Thunk::type = create<Type>();
+TypeRef Thunk::type = create<Type>("Thunk");
 
 Thunk::Thunk(TypeRef type) : Object(type) {
 }
