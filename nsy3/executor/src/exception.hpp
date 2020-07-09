@@ -9,6 +9,7 @@ public:
     Exception(TypeRef type, std::string reason);
     static TypeRef type;
     std::string to_str() override;
+    void raise();
 };
 
 class TypeException : public Exception {
@@ -23,10 +24,10 @@ public:
     static TypeRef type;
 };
 
-// class TypeException : public Exception {
-// public:
-//     TypeException(TypeRef type, std::string reason);
-//     static TypeRef type;
-// };
+class AssertionException : public Exception {
+public:
+    using Exception::Exception;
+    static TypeRef type;
+};
 
 #endif // EXCEPTION_HPP

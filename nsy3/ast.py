@@ -14,7 +14,7 @@ class ASTNode:
     def __post_init__(self):
         try:
             self.lineno = self.tok.lineno
-        except KeyError:
+        except AttributeError:
             self.lineno = None
 
     def as_str(self, prefix=""):
@@ -142,6 +142,14 @@ class Return(Stmt):
 
     def pprint(self):
         return [(0, "return")] + self.expr.pprint()
+
+
+@dataclasses.dataclass(repr=False)
+class Assert(Stmt):
+    expr: Expr
+
+    def pprint(self):
+        return [(0, "assert")] + self.expr.pprint()
 
 
 @dataclasses.dataclass(repr=False)

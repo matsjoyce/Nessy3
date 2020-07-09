@@ -1,0 +1,6 @@
+__pycache__
+*.nsy3c
+parser.out
+htmlcov
+*.kdev4
+

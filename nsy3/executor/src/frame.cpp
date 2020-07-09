@@ -22,7 +22,7 @@ std::string Frame::to_str() {
 ObjectRef Frame::get_env(std::string name) {
     auto iter = env.find(name);
     if (iter == env.end()) {
-        throw create<NameException>("Name '" + name + "' is not defined");
+        create<NameException>("Name '" + name + "' is not defined")->raise();
     }
     return iter->second;
 }
@@ -33,7 +33,7 @@ void Frame::set_env(std::string name, ObjectRef value) {
 
 void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_string<unsigned char>& code, const std::vector<ObjectRef>& consts) {
     if (auto thunk = dynamic_cast<Thunk*>(item.get())) {
-        if (skip_position) {
+        if (skip_position != static_cast<unsigned int>(-1)) {
             auto subframe = create<Frame>(this->code, position, env);
             subframe->limit = skip_position;
             std::swap(stack, subframe->stack);
@@ -46,7 +46,7 @@ void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_str
                     auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
                     auto name = dynamic_cast<String*>(consts[arg].get());
                     if (!name) {
-                        throw create<TypeException>("Name must be a string");
+                        create<TypeException>("Name must be a string")->raise();
                     }
                     auto name_thunk = create<NameExtractThunk>(name->get());
                     exec_thunk->subscribe(name_thunk);
@@ -62,6 +62,7 @@ void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_str
             auto name_thunk = create<NameExtractThunk>("return");
             exec_thunk->subscribe(name_thunk);
             thunk->subscribe(exec_thunk);
+            env["return"] = name_thunk;
             return_thunk = name_thunk;
         }
     }
@@ -88,7 +89,7 @@ ObjectRef Frame::execute() {
                 stack.pop_back();
                 auto name = dynamic_cast<String*>(nameobj.get());
                 if (!name) {
-                    throw create<TypeException>("Attribute must be a string");
+                    create<TypeException>("Attribute must be a string")->raise();
                 }
                 auto obj = stack.back().second;
                 stack.pop_back();
@@ -110,7 +111,7 @@ ObjectRef Frame::execute() {
             case Ops::GET: {
                 auto name = dynamic_cast<String*>(consts[arg].get());
                 if (!name) {
-                    throw create<TypeException>("Name must be a string");
+                    create<TypeException>("Name must be a string")->raise();
                 }
                 stack_push(0, get_env(name->get()), code, consts);
                 break;
@@ -118,7 +119,7 @@ ObjectRef Frame::execute() {
             case Ops::SET: {
                 auto name = dynamic_cast<String*>(consts[arg].get());
                 if (!name) {
-                    throw create<TypeException>("Name must be a string");
+                    create<TypeException>("Name must be a string")->raise();
                 }
                 env[name->get()] = stack.back().second;
                 stack.pop_back();

@@ -21,10 +21,17 @@ ObjectRef braks(const std::vector<ObjectRef>& args) {
     return create<List>(args);
 }
 
+int assert(ObjectRef obj) {
+    if (!obj->to_bool()) {
+        create<AssertionException>("Assertion failed")->raise();
+    }
+    return 1;
+}
+
 std::map<std::string, ObjectRef> builtins = {
     {"print", create<BuiltinFunction>(print)},
     {"->", create<BuiltinFunction>(arrow)},
     {"Signature", Signature::type},
     {"[]", create<BuiltinFunction>(braks)},
-    {"make_err", create<BuiltinFunction>([]() -> int { throw static_cast<ObjectRef>(create<NameException>("An error.")); })}
+    {"assert", create<BuiltinFunction>(assert)},
 };

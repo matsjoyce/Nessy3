@@ -9,5 +9,10 @@ std::string Exception::to_str() {
     return obj_type()->name() + ": " + reason;
 }
 
+void Exception::raise() {
+    throw shared_from_this();
+}
+
 TypeRef TypeException::type = create<Type>("TypeException");
 TypeRef NameException::type = create<Type>("NameException");
+TypeRef AssertionException::type = create<Type>("AssertionException");

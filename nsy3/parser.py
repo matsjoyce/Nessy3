@@ -39,7 +39,7 @@ class NSY2Lexer(Lexer):
     tokens = {NAME, AT, DOLLER, NUMBER, STRING, DOT, COMMA, EQEQ, ARROW, LAMBDA, NEQ, EQ,
               PLUSEQ, PLUS, MINUSEQ, MINUS, STAREQ, STAR, STARSTAREQ, STARSTAR, SLASHEQ, SLASH, SLASHSLASHEQ, SLASHSLASH, PERCENTEQ, PERCENT,
               LBRAK, RBRAK, LPAREN, RPAREN, LCURLY, RCURLY, LTE, GTE, LT, GT, COLON, TRUE, FALSE, IF, ELSE, ELIF, FOR, WHILE,
-              IN, AND, OR, NOT, DEF, RETURN, BREAK, CONTINUE, PASS, WHITESPACE, INDENT, DEDENT, NEWLINE}
+              IN, AND, OR, NOT, DEF, RETURN, BREAK, CONTINUE, PASS, ASSERT, WHITESPACE, INDENT, DEDENT, NEWLINE}
 
     NAME = r"[a-zA-Z_]\w*"
     AT = r"@"
@@ -92,6 +92,7 @@ class NSY2Lexer(Lexer):
     NAME["break"] = BREAK
     NAME["continue"] = CONTINUE
     NAME["pass"] = PASS
+    NAME["assert"] = ASSERT
 
     @_(r"[0-9]+(\.[0-9])?")
     def NUMBER(self, t):
@@ -187,6 +188,7 @@ class NSY2Parser(Parser):
     tokens = NSY2Lexer.tokens
 
     precedence = (
+        ("nonassoc", LOWPREC),
         ("right", ARROW),
         ("left", OR),
         ("left", AND),
@@ -196,7 +198,7 @@ class NSY2Parser(Parser):
         ("left", STAR, SLASH, SLASHSLASH, PERCENT),
         ("right", UMINUS),
         ("right", STARSTAR),
-        ("left", LBRAK)
+        ("left", LBRAK, DOT)
     )
 
     @_("NEWLINE")
@@ -275,6 +277,10 @@ class NSY2Parser(Parser):
     def simple_stmt(self, p):
         return ast.Return(p, p.expr)
 
+    @_("ASSERT expr")
+    def simple_stmt(self, p):
+        return ast.Assert(p, p.expr)
+
     @_("COLON NEWLINE INDENT stmts DEDENT")
     def block(self, p):
         return ast.Block(p, p.stmts)
@@ -347,11 +353,11 @@ class NSY2Parser(Parser):
         return ast.Monop(p, p[0], p.expr)
 
 
-    @_("expr LBRAK expr RBRAK")
+    @_("expr LBRAK expr RBRAK %prec LBRAK")
     def expr(self, p):
         return ast.Binop(p, "[]", p.expr0, p.expr1)
 
-    @_("expr DOT NAME")
+    @_("expr DOT NAME %prec DOT")
     def expr(self, p):
         return ast.Binop(p, ".", p.expr, p.NAME)
 
@@ -378,31 +384,33 @@ class NSY2Parser(Parser):
         "DOLLER multipartname STARSTAREQ expr",
     )
     def simple_stmt(self, p):
-        old_value = ast.Call(ast.Name("$?"), [ast.SequenceLiteral("[]", p.multipartname), ast.SequenceLiteral("[]", [ast.Literal("partial")])])
-        return ast.ExprStmt(ast.Call(ast.Name("$="), [ast.SequenceLiteral("[]", p.multipartname),
-                                                      ast.Call(ast.Name(p[2][:-1]), [old_value, p.expr])]))
+        old_value = ast.Call(p, ast.Name(p, "$?"), [ast.SequenceLiteral(p, "[]", p.multipartname), ast.SequenceLiteral(p, "[]", [ast.Literal(p, "partial")])])
+        return ast.ExprStmt(p, ast.Call(p, ast.Name(p, "$="), [ast.SequenceLiteral(p, "[]", p.multipartname),
+                                                      ast.Call(p, ast.Name(p, p[2][:-1]), [old_value, p.expr])]))
 
     @_("DOLLER multipartname EQ expr")
     def simple_stmt(self, p):
-        return ast.ExprStmt(ast.Call(ast.Name("$="), [ast.SequenceLiteral("[]", p.multipartname), p.expr]))
+        return ast.ExprStmt(p, ast.Call(p, ast.Name(p, "$="), [ast.SequenceLiteral(p, "[]", p.multipartname), p.expr]))
 
     @_("DOLLER multipartname dflags")
     def expr(self, p):
-        return ast.Call(ast.Name("$?"), [ast.SequenceLiteral("[]", p.multipartname), ast.SequenceLiteral("[]", p.dflags)])
+        return ast.Call(p, ast.Name(p, "$?"), [ast.SequenceLiteral(p, "[]", p.multipartname), ast.SequenceLiteral(p, "[]", p.dflags)])
 
     @_("NAME")
     def multipartname(self, p):
-        return [ast.Literal(p.NAME)]
+        return [ast.Literal(p, p.NAME)]
 
     @_("multipartname DOT NAME")
     def multipartname(self, p):
-        return p.multipartname + [ast.Literal(p.NAME)]
+        return p.multipartname + [ast.Literal(p, p.NAME)]
 
     @_("multipartname LBRAK expr RBRAK")
     def multipartname(self, p):
         return p.multipartname + [p.expr]
 
-    @_("")
+    # So, there is an ambiguity, where $a.b.c could be ($a.b).c or ($a.b.c). We solve this using the precedence table.
+    # However, why the LOWPREC needs to be assigned to this rule? No idea.
+    @_("%prec LOWPREC")
     def dflags(self, p):
         return []
 

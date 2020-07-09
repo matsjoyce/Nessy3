@@ -5,6 +5,9 @@ from . import ast, bytecode, serialisation
 from .bytecode import Bytecode
 
 
+RETURN_SKIP = 2 ** 32 - 1
+
+
 class CompiledCode:
     def __init__(self, fname):
         self.fname = fname
@@ -166,7 +169,7 @@ def compile_stmt(a, ctx):
             raise RuntimeError()
         yield Bytecode.JUMP(labels[0])
     elif isinstance(a, ast.Return):
-        yield Bytecode.SETSKIP(0)
+        yield Bytecode.SETSKIP(RETURN_SKIP)
         yield Bytecode.RETURN(compile_expr(a.expr, ctx))
     elif isinstance(a, ast.Block):
         for s in a.stmts:
@@ -188,7 +191,7 @@ def compile_stmt(a, ctx):
         else_comp = Bytecode.SEQ(*list(compile_stmt(a.else_block, ctx)))
         # If there is a return statement in either block, the skip must be a return skip to avoid another return statement executing
         if any(op.type == Bytecode.RETURN for op in itertools.chain(if_comp.linearize(), else_comp.linearize())):
-            yield Bytecode.SETSKIP(0)
+            yield Bytecode.SETSKIP(RETURN_SKIP)
         else:
             yield Bytecode.SETSKIP(end_label)
         yield Bytecode.JUMP_IFNOT(else_label, compile_expr(a.expr, ctx))
@@ -203,7 +206,7 @@ def compile_stmt(a, ctx):
         block_comp = Bytecode.SEQ(*list(compile_stmt(a.block, ctx)))
         # If there is a return statement in the block, the skip must be a return skip to avoid another return statement executing
         if any(op.type == Bytecode.RETURN for op in block_comp.linearize()):
-            yield Bytecode.SETSKIP(0)
+            yield Bytecode.SETSKIP(RETURN_SKIP)
         else:
             yield Bytecode.SETSKIP(end_label)
         yield start_label
@@ -212,6 +215,11 @@ def compile_stmt(a, ctx):
         yield Bytecode.JUMP(start_label)
         yield end_label
         ctx.pop_loop()
+    elif isinstance(a, ast.Assert):
+        skip_label = ctx.label()
+        yield Bytecode.SETSKIP(skip_label)
+        yield Bytecode.CALL(Bytecode.GET(ctx.const("assert", wrap=False)), compile_expr(a.expr, ctx))
+        yield skip_label
     elif isinstance(a, ast.ForStmt):
         return ...
     #elif isinstance(a, ast.):

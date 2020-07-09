@@ -1,0 +1,11 @@
+x = 1
+assert x == 1
+z = __exec__.test_thunk("hai")
+assert z + 10 == 11
+
+def f():
+    if __exec__.test_thunk("hai"):
+        return 100
+    return 1
+
+assert f() == 100

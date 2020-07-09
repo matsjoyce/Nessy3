@@ -23,6 +23,7 @@ public:
     ObjectRef execute();
     void set_env(std::string name, ObjectRef value);
     ObjectRef get_env(std::string name);
+    bool complete();
 
     friend class ExecutionThunk;
 };
