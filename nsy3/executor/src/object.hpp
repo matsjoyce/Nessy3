@@ -199,17 +199,20 @@ public:
     const std::vector<ObjectRef>& get() const { return value; }
 };
 
+class ExecutionEngine;
+
 class Thunk : public Object {
-    std::vector<std::shared_ptr<const Thunk>> waiting_thunks;
+    ExecutionEngine* execengine;
     bool finalized = false;
 public:
-    Thunk(TypeRef type);
+    Thunk(TypeRef type, ExecutionEngine* execengine);
     ~Thunk();
     static TypeRef type;
     // Naughty method
     void subscribe(std::shared_ptr<const Thunk> thunk) const;
     virtual void notify(ObjectRef obj) const;
     void finalize(ObjectRef obj) const;
+    ExecutionEngine* execution_engine() const { return execengine; }
 };
 
 #endif // OBJECT_HPP

@@ -1,3 +1,4 @@
+print("Assertions: 3")
 x = 1
 assert x == 1
 z = test_thunk("hai")

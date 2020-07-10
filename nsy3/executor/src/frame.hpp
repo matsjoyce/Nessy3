@@ -30,14 +30,14 @@ public:
 class ExecutionThunk : public Thunk {
     std::shared_ptr<const Frame> frame;
 public:
-    ExecutionThunk(TypeRef type, std::shared_ptr<const Frame> frame);
+    ExecutionThunk(TypeRef type, ExecutionEngine* execengine, std::shared_ptr<const Frame> frame);
     void notify(ObjectRef obj) const override;
 };
 
 class NameExtractThunk : public Thunk {
     std::string name;
 public:
-    NameExtractThunk(TypeRef type, std::string name);
+    NameExtractThunk(TypeRef type, ExecutionEngine* execengine, std::string name);
     void notify(ObjectRef obj) const override;
 };
 

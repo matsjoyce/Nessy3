@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <iostream>
+#include "executionengine.hpp"
 
 std::vector<std::pair<std::weak_ptr<Object>, TypeRef*>> untyped_objects;
 
@@ -256,7 +257,7 @@ std::string List::to_str() const {
 
 TypeRef Thunk::type = create<Type>("Thunk");
 
-Thunk::Thunk(TypeRef type) : Object(type) {
+Thunk::Thunk(TypeRef type, ExecutionEngine* execengine) : Object(type), execengine(execengine) {
 }
 
 Thunk::~Thunk() {
@@ -266,7 +267,7 @@ Thunk::~Thunk() {
 }
 
 void Thunk::subscribe(std::shared_ptr<const Thunk> thunk) const {
-    const_cast<Thunk*>(this)->waiting_thunks.push_back(thunk);
+    execengine->subscribe_thunk(std::dynamic_pointer_cast<const Thunk>(shared_from_this()), thunk);
 }
 
 void Thunk::notify(ObjectRef /*obj*/) const {
@@ -274,7 +275,5 @@ void Thunk::notify(ObjectRef /*obj*/) const {
 
 void Thunk::finalize(ObjectRef obj) const {
     const_cast<Thunk*>(this)->finalized = true;
-    for (auto thunk : waiting_thunks) {
-        thunk->notify(obj);
-    }
+    execengine->finalize_thunk(std::dynamic_pointer_cast<const Thunk>(shared_from_this()), std::move(obj));
 }

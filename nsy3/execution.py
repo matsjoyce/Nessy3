@@ -18,10 +18,17 @@ def compile_file(fname):
     with comp_fname.open("wb") as f:
         f.write(c.to_bytes())
 
-def execute_file(fname):
+def execute_file(fname, return_stdout=False):
     comp_fname = fname.with_suffix(".nsy3c")
     compile_file(fname)
-    proc = subprocess.run([EXECUTOR, comp_fname])
+    kwargs = {}
+    if return_stdout:
+        kwargs["stdout"] = subprocess.PIPE
+        kwargs["stderr"] = subprocess.STDOUT
+
+    proc = subprocess.run([EXECUTOR, comp_fname], **kwargs)
     if proc.returncode:
         raise RuntimeError("Execution failed")
+    if return_stdout:
+        return proc.stdout
 

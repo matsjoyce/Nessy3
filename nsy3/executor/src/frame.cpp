@@ -32,7 +32,7 @@ inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const
             std::swap(stack, sf_stack);
             auto subframe = create<Frame>(frame.code(), position, env, skip_position, sf_stack);
 
-            auto exec_thunk = create<ExecutionThunk>(subframe);
+            auto exec_thunk = create<ExecutionThunk>(thunk->execution_engine(), subframe);
             thunk->subscribe(exec_thunk);
             // Exploit the fact that skip_pos > pos and that nothing is going to jump out of that range to find all of the sets.
             for (; position < skip_position; position += 5) {
@@ -42,7 +42,7 @@ inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const
                     if (!name) {
                         create<TypeException>("Name must be a string")->raise();
                     }
-                    auto name_thunk = create<NameExtractThunk>(name->get());
+                    auto name_thunk = create<NameExtractThunk>(thunk->execution_engine(), name->get());
                     exec_thunk->subscribe(name_thunk);
                     env[name->get()] = name_thunk;
                 }
@@ -51,8 +51,8 @@ inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const
         }
         else {
             auto subframe = create<Frame>(frame.code(), position, env, skip_position, stack);
-            auto exec_thunk = create<ExecutionThunk>(subframe);
-            auto name_thunk = create<NameExtractThunk>("return");
+            auto exec_thunk = create<ExecutionThunk>(thunk->execution_engine(), subframe);
+            auto name_thunk = create<NameExtractThunk>(thunk->execution_engine(), "return");
             exec_thunk->subscribe(name_thunk);
             thunk->subscribe(exec_thunk);
             env["return"] = name_thunk;
@@ -175,7 +175,7 @@ std::map<std::string, ObjectRef> Frame::execute() const {
     return env;
 }
 
-ExecutionThunk::ExecutionThunk(TypeRef type, std::shared_ptr<const Frame> frame) : Thunk(type), frame(frame) {
+ExecutionThunk::ExecutionThunk(TypeRef type, ExecutionEngine* execengine, std::shared_ptr<const Frame> frame) : Thunk(type, execengine), frame(frame) {
 }
 
 void ExecutionThunk::notify(ObjectRef obj) const {
@@ -192,7 +192,7 @@ void ExecutionThunk::notify(ObjectRef obj) const {
     finalize(create<Dict>(objenv));
 }
 
-NameExtractThunk::NameExtractThunk(TypeRef type, std::string name) : Thunk(type), name(name) {
+NameExtractThunk::NameExtractThunk(TypeRef type, ExecutionEngine* execengine, std::string name) : Thunk(type, execengine), name(name) {
 }
 
 void NameExtractThunk::notify(ObjectRef obj) const {
