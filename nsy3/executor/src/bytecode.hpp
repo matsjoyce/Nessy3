@@ -31,13 +31,12 @@ class Code : public Object {
 public:
     Code(TypeRef type, std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab);
     static const unsigned int npos = -1;
-    static std::shared_ptr<Code> from_file(std::string fname);
+    static std::shared_ptr<const Code> from_file(std::string fname);
 
-    void print();
-    std::string to_str() override;
+    void print() const;
     static TypeRef type;
-    unsigned int lineno_for_position(unsigned int position);
-    std::string filename();
+    unsigned int lineno_for_position(unsigned int position) const;
+    std::string filename() const;
 
     friend class Frame;
 };
@@ -48,7 +47,7 @@ class Signature : public Object {
     unsigned char flags;
 public:
     Signature(TypeRef type, std::vector<std::string> names, std::vector<ObjectRef> defaults, unsigned char flags);
-    std::string to_str() override;
+    std::string to_str() const override;
     static TypeRef type;
 
     enum : char {
@@ -60,16 +59,16 @@ public:
 };
 
 class Function : public Object {
-    std::shared_ptr<Code> code;
+    std::shared_ptr<const Code> code;
     int offset;
-    std::shared_ptr<Signature> signature_;
+    std::shared_ptr<const Signature> signature_;
     std::map<std::string, ObjectRef> env;
 public:
-    Function(TypeRef type, std::shared_ptr<Code> code, int offset, std::shared_ptr<Signature> signature, std::map<std::string, ObjectRef> env);
-    ObjectRef call(const std::vector<ObjectRef>& args) override;
-    std::string to_str() override;
+    Function(TypeRef type, std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::map<std::string, ObjectRef> env);
+    ObjectRef call(const std::vector<ObjectRef>& args) const override;
+    std::string to_str() const override;
     static TypeRef type;
-    std::shared_ptr<Signature> signature() { return signature_; }
+    std::shared_ptr<const Signature> signature() const { return signature_; }
 };
 
 #endif // BYTECODE_HPP

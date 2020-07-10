@@ -1,20 +1,15 @@
 #include "executionengine.hpp"
-#include "builtinfunction.hpp"
+#include "functionutils.hpp"
 #include "bytecode.hpp"
 #include "frame.hpp"
 #include "builtins.hpp"
 
 #include <iostream>
 
-TypeRef ExecutionEngine::type = create<Type>("ExecutionEngine", Type::attrmap{
-    {"test_thunk", create<BuiltinFunction>(method(&ExecutionEngine::test_thunk))}
-});
-
-ExecutionEngine::ExecutionEngine(TypeRef type) : Object(type) {
-}
-
-std::string ExecutionEngine::to_str() {
-    return "ExecutionEngine";
+ExecutionEngine::ExecutionEngine() {
+    env_additions = {
+        {"test_thunk", create<BuiltinFunction>(std::function<ObjectRef(std::string)>(std::bind(&ExecutionEngine::test_thunk, this, std::placeholders::_1)))}
+    };
 }
 
 ObjectRef ExecutionEngine::test_thunk(std::string name) {
@@ -36,13 +31,14 @@ void ExecutionEngine::exec_file(std::string fname) {
     auto c = Code::from_file(fname);
     c->print();
     auto start_env = builtins;
-    start_env["__exec__"] = shared_from_this();
+    auto additions = env_additions;
+    start_env.merge(additions);
     create<Frame>(c, 0, start_env)->execute();
 }
 
 TestThunk::TestThunk(TypeRef type, std::string name) : Thunk(type), name(name) {
 }
 
-std::string TestThunk::to_str() {
-    return "TestThunk(" + name + ")";
+std::string TestThunk::to_str() const {
+    return "TT(" + name + ")";
 }

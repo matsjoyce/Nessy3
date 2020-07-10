@@ -5,11 +5,11 @@
 
 class TestThunk;
 
-class ExecutionEngine : public Object {
-    std::vector<std::shared_ptr<TestThunk>> test_thunks;
+class ExecutionEngine {
+    std::vector<std::shared_ptr<const TestThunk>> test_thunks;
+    std::map<std::string, ObjectRef> env_additions;
 public:
-    ExecutionEngine(TypeRef type);
-    std::string to_str() override;
+    ExecutionEngine();
     static TypeRef type;
     ObjectRef test_thunk(std::string name);
     void finish();
@@ -20,7 +20,7 @@ class TestThunk : public Thunk {
     std::string name;
 public:
     TestThunk(TypeRef type, std::string name);
-    std::string to_str() override;
+    std::string to_str() const override;
 };
 
 #endif // EXECUTIONENGINE_HPP

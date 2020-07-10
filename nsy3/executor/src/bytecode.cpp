@@ -1,7 +1,7 @@
 #include "bytecode.hpp"
 #include "serialisation.hpp"
 #include "frame.hpp"
-#include "builtinfunction.hpp"
+#include "functionutils.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -13,7 +13,7 @@ Code::Code(TypeRef type, std::basic_string<unsigned char> code, std::vector<Obje
     : Object(type), code(code), consts(consts), fname(fname), linenotab(linenotab) {
 }
 
-std::shared_ptr<Code> Code::from_file(std::string fname) {
+std::shared_ptr<const Code> Code::from_file(std::string fname) {
     std::ifstream f(fname);
     if (!f) {
         throw std::runtime_error("Could not open file");
@@ -36,7 +36,7 @@ std::shared_ptr<Code> Code::from_file(std::string fname) {
     );
 }
 
-void Code::print() {
+void Code::print() const {
     std::cout << "Compiled from " << fname << std::endl;
     std::cout << "Consts:" << std::endl;
     for (auto i = 0u; i < consts.size(); ++i) {
@@ -58,7 +58,7 @@ void Code::print() {
             std::cout << "Line " << lineno << std::endl;
         }
         auto op = code[pos];
-        auto arg = *reinterpret_cast<unsigned int*>(code.data() + pos + 1);
+        auto arg = *reinterpret_cast<const unsigned int*>(code.data() + pos + 1);
         std::cout << "  " << pos << ": ";
         switch (static_cast<Ops>(op)) {
             case Ops::KWARG: std::cout << "KWARG " << arg << std::endl; break;
@@ -79,11 +79,7 @@ void Code::print() {
     }
 }
 
-std::string Code::to_str() {
-    return "Code(?)";
-}
-
-unsigned int Code::lineno_for_position(unsigned int position) {
+unsigned int Code::lineno_for_position(unsigned int position) const {
     unsigned int lineno = 0, lineno_bcode_pos = 0;
     auto linenotab_iter = linenotab.begin();
     while (position >= lineno_bcode_pos + *linenotab_iter && linenotab_iter != linenotab.end()) {
@@ -93,7 +89,7 @@ unsigned int Code::lineno_for_position(unsigned int position) {
     return lineno;
 }
 
-std::string Code::filename() {
+std::string Code::filename() const {
     return fname;
 }
 
@@ -106,7 +102,7 @@ Signature::Signature(TypeRef type, std::vector<std::string> names, std::vector<O
     : Object(type), names(names), defaults(defaults), flags(flags) {
 }
 
-std::string Signature::to_str() {
+std::string Signature::to_str() const {
     std::string res;
     auto name_iter = names.rbegin();
     if (flags & VARKWARGS) {
@@ -131,11 +127,11 @@ TypeRef Function::type = create<Type>("Function", Type::attrmap{
     {"signature", create<Property>(create<BuiltinFunction>(method(&Function::signature)))}
 });
 
-Function::Function(TypeRef type, std::shared_ptr<Code> code, int offset, std::shared_ptr<Signature> signature, std::map<std::string, ObjectRef> env)
+Function::Function(TypeRef type, std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::map<std::string, ObjectRef> env)
     : Object(type), code(code), offset(offset), signature_(signature), env(env) {
 }
 
-ObjectRef Function::call(const std::vector<ObjectRef>& args) {
+ObjectRef Function::call(const std::vector<ObjectRef>& args) const {
     auto new_env = env;
     if (args.size() > signature_->names.size() || args.size() < signature_->names.size() - signature_->defaults.size()) {
         throw std::runtime_error("Wrong no. args.");
@@ -147,9 +143,9 @@ ObjectRef Function::call(const std::vector<ObjectRef>& args) {
     for (; name_iter != signature_->names.end(); ++name_iter) {
         new_env[*name_iter] = signature_->defaults[name_iter - signature_->names.end() + signature_->defaults.size()];
     }
-    return create<Frame>(code, offset, new_env)->execute();
+    return create<Frame>(code, offset, new_env)->execute()["return"];
 }
 
-std::string Function::to_str() {
+std::string Function::to_str() const {
     return "F(?)";
 }

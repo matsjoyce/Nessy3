@@ -1,6 +1,6 @@
 #include "frame.hpp"
 
-#include "builtinfunction.hpp"
+#include "functionutils.hpp"
 #include "exception.hpp"
 
 #include <stdexcept>
@@ -8,35 +8,29 @@
 
 TypeRef Frame::type = create<Type>("Frame");
 
-Frame::Frame(TypeRef type, std::shared_ptr<Code> code, int offset, std::map<std::string, ObjectRef> env) : Object(type), code(code), position(offset), env(env) {
-    this->env["__code__"] = code;
-    if (!this->env.count("__exec__")) {
-        throw std::runtime_error("No execution engine");
-    }
+Frame::Frame(TypeRef type, std::shared_ptr<const Code> code, unsigned int offset,
+             std::map<std::string, ObjectRef> env, unsigned int limit, std::vector<std::pair<unsigned char, ObjectRef>> stack)
+    : Object(type), code_(code), position_(offset), limit_(limit), env_(env), stack_(stack) {
+    this->env_["__code__"] = code;
 }
 
-std::string Frame::to_str() {
-    return "Frame";
-}
-
-ObjectRef Frame::get_env(std::string name) {
-    auto iter = env.find(name);
-    if (iter == env.end()) {
+ObjectRef Frame::get_env(std::string name) const {
+    auto iter = env_.find(name);
+    if (iter == env_.end()) {
         create<NameException>("Name '" + name + "' is not defined")->raise();
     }
     return iter->second;
 }
 
-void Frame::set_env(std::string name, ObjectRef value) {
-    env[name] = value;
-}
-
-void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_string<unsigned char>& code, const std::vector<ObjectRef>& consts) {
-    if (auto thunk = dynamic_cast<Thunk*>(item.get())) {
+inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const Frame& frame, const std::basic_string<unsigned char>& code,
+                       const std::vector<ObjectRef>& consts, std::vector<std::pair<unsigned char, ObjectRef>>& stack,
+                       unsigned int& position, std::map<std::string, ObjectRef>& env, unsigned int skip_position
+                       ) {
+    if (auto thunk = dynamic_cast<const Thunk*>(item.get())) {
         if (skip_position != static_cast<unsigned int>(-1)) {
-            auto subframe = create<Frame>(this->code, position, env);
-            subframe->limit = skip_position;
-            std::swap(stack, subframe->stack);
+            std::vector<std::pair<unsigned char, ObjectRef>> sf_stack;
+            std::swap(stack, sf_stack);
+            auto subframe = create<Frame>(frame.code(), position, env, skip_position, sf_stack);
 
             auto exec_thunk = create<ExecutionThunk>(subframe);
             thunk->subscribe(exec_thunk);
@@ -44,7 +38,7 @@ void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_str
             for (; position < skip_position; position += 5) {
                 if (static_cast<Ops>(code[position]) == Ops::SET) {
                     auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
-                    auto name = dynamic_cast<String*>(consts[arg].get());
+                    auto name = dynamic_cast<const String*>(consts[arg].get());
                     if (!name) {
                         create<TypeException>("Name must be a string")->raise();
                     }
@@ -53,29 +47,33 @@ void Frame::stack_push(unsigned char flags, ObjectRef item, const std::basic_str
                     env[name->get()] = name_thunk;
                 }
             }
-            position = skip_position;
+            return skip_position;
         }
         else {
-            limit = position;
-            std::cout << "RETURN THUNK" << std::endl;
-            auto exec_thunk = create<ExecutionThunk>(std::dynamic_pointer_cast<Frame>(shared_from_this()));
+            auto subframe = create<Frame>(frame.code(), position, env, skip_position, stack);
+            auto exec_thunk = create<ExecutionThunk>(subframe);
             auto name_thunk = create<NameExtractThunk>("return");
             exec_thunk->subscribe(name_thunk);
             thunk->subscribe(exec_thunk);
             env["return"] = name_thunk;
-            return_thunk = name_thunk;
+            return static_cast<unsigned int>(-1);
         }
     }
     else {
         stack.emplace_back(std::make_pair(flags, item));
     }
+    return position;
 }
 
 
-ObjectRef Frame::execute() {
-    const auto& code = this->code->code;
-    const auto& consts = this->code->consts;
-    while (position < limit) {
+std::map<std::string, ObjectRef> Frame::execute() const {
+    const auto& code = code_->code;
+    const auto& consts = code_->consts;
+    auto stack = stack_;
+    auto position = position_;
+    auto env = env_;
+    unsigned int skip_position = 0;
+    while (position < limit_) {
         auto op = static_cast<Ops>(code[position]);
         auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
         position += 5;
@@ -87,13 +85,13 @@ ObjectRef Frame::execute() {
             case Ops::GETATTR: {
                 auto nameobj = stack.back().second;
                 stack.pop_back();
-                auto name = dynamic_cast<String*>(nameobj.get());
+                auto name = dynamic_cast<const String*>(nameobj.get());
                 if (!name) {
                     create<TypeException>("Attribute must be a string")->raise();
                 }
                 auto obj = stack.back().second;
                 stack.pop_back();
-                stack_push(0, obj->getattr(name->get()), code, consts);
+                position = stack_push(0, obj->getattr(name->get()), *this, code, consts, stack, position, env, skip_position);
                 break;
             }
             case Ops::CALL: {
@@ -105,19 +103,23 @@ ObjectRef Frame::execute() {
                 stack.erase(pos_iter, stack.end());
                 auto func = stack.back().second;
                 stack.pop_back();
-                stack_push(0, func->call(args), code, consts);
+                position = stack_push(0, func->call(args), *this, code, consts, stack, position, env, skip_position);
                 break;
             }
             case Ops::GET: {
-                auto name = dynamic_cast<String*>(consts[arg].get());
+                auto name = dynamic_cast<const String*>(consts[arg].get());
                 if (!name) {
                     create<TypeException>("Name must be a string")->raise();
                 }
-                stack_push(0, get_env(name->get()), code, consts);
+                auto iter = env.find(name->get());
+                if (iter == env.end()) {
+                    create<NameException>("Name '" + name->get() + "' is not defined")->raise();
+                }
+                position = stack_push(0, iter->second, *this, code, consts, stack, position, env, skip_position);
                 break;
             }
             case Ops::SET: {
-                auto name = dynamic_cast<String*>(consts[arg].get());
+                auto name = dynamic_cast<const String*>(consts[arg].get());
                 if (!name) {
                     create<TypeException>("Name must be a string")->raise();
                 }
@@ -150,8 +152,8 @@ ObjectRef Frame::execute() {
             case Ops::RETURN: {
                 auto obj = stack.back().second;
                 stack.pop_back();
-                set_env("return", obj);
-                return obj;
+                env["return"] = obj;
+                return env;
             }
             case Ops::GETENV: {
                 ObjectRefMap env_copy;
@@ -170,27 +172,30 @@ ObjectRef Frame::execute() {
             }
         }
     }
-    limit = static_cast<unsigned int>(-1);
-    return return_thunk;
+    return env;
 }
 
-ExecutionThunk::ExecutionThunk(TypeRef type, std::shared_ptr<Frame> frame) : Thunk(type), frame(frame) {
+ExecutionThunk::ExecutionThunk(TypeRef type, std::shared_ptr<const Frame> frame) : Thunk(type), frame(frame) {
 }
 
-void ExecutionThunk::notify(ObjectRef obj) {
-    if (dynamic_cast<Thunk*>(obj.get())) {
+void ExecutionThunk::notify(ObjectRef obj) const {
+    if (dynamic_cast<const Thunk*>(obj.get())) {
         throw std::runtime_error("Notify was a thunk");
     }
-    frame->stack.push_back(std::make_pair(0, obj));
-    std::cout << "Resume " << frame->stack.size() << " " << frame->position << " " << frame->limit << std::endl;
-    frame->execute();
-    finalize(frame);
+    auto new_stack = frame->stack_;
+    new_stack.push_back(std::make_pair(0, obj));
+    auto new_frame = create<Frame>(frame->code_, frame->position_, frame->env_, frame->limit_, std::move(new_stack));
+    ObjectRefMap objenv;
+    for (auto item : new_frame->execute()) {
+        objenv[create<String>(item.first)] = item.second;
+    }
+    finalize(create<Dict>(objenv));
 }
 
 NameExtractThunk::NameExtractThunk(TypeRef type, std::string name) : Thunk(type), name(name) {
 }
 
-void NameExtractThunk::notify(ObjectRef obj) {
-    auto frame = std::dynamic_pointer_cast<Frame>(obj);
-    finalize(frame->get_env(name));
+void NameExtractThunk::notify(ObjectRef obj) const {
+    auto env = std::dynamic_pointer_cast<const Dict>(obj);
+    finalize(env->get().at(create<String>(name)));
 }

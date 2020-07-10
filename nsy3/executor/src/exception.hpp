@@ -8,8 +8,8 @@ class Exception : public Object {
 public:
     Exception(TypeRef type, std::string reason);
     static TypeRef type;
-    std::string to_str() override;
-    void raise();
+    std::string to_str() const override;
+    void raise() const;
 };
 
 class TypeException : public Exception {

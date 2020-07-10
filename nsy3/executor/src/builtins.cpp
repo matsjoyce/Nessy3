@@ -1,5 +1,5 @@
 #include "builtins.hpp"
-#include "builtinfunction.hpp"
+#include "functionutils.hpp"
 #include "bytecode.hpp"
 #include "exception.hpp"
 #include <iostream>
@@ -13,7 +13,7 @@ int print(const std::vector<ObjectRef>& args) {
     return 0;
 }
 
-ObjectRef arrow(std::shared_ptr<Code> code, int offset, std::shared_ptr<Signature> signature, std::map<std::string, ObjectRef> env) {
+ObjectRef arrow(std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::map<std::string, ObjectRef> env) {
     return create<Function>(code, offset, signature, env);
 }
 

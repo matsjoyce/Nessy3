@@ -30,7 +30,7 @@ add_library(libexecutor SHARED
             src/bytecode.cpp
             src/frame.cpp
             src/serialisation.cpp
-            src/builtinfunction.cpp
+            src/functionutils.cpp
             src/builtins.cpp
             src/executionengine.cpp
             src/exception.cpp

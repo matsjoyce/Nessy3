@@ -23,5 +23,5 @@ def execute_file(fname):
     compile_file(fname)
     proc = subprocess.run([EXECUTOR, comp_fname])
     if proc.returncode:
-        print("Err, executor returned", proc.returncode)
+        raise RuntimeError("Execution failed")
 

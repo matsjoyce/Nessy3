@@ -8,39 +8,37 @@
 #include "object.hpp"
 
 class Frame : public Object {
-    std::shared_ptr<Code> code;
-    unsigned int position = 0, skip_position = -1, limit = -1;
-    std::map<std::string, ObjectRef> env;
-    std::vector<std::pair<unsigned char, ObjectRef>> stack;
-    ObjectRef return_thunk;
-
-    void stack_push(unsigned char flags, ObjectRef item, const std::basic_string<unsigned char>& code, const std::vector<ObjectRef>& consts);
+    std::shared_ptr<const Code> code_;
+    unsigned int position_ = 0, limit_ = -1;
+    std::map<std::string, ObjectRef> env_;
+    std::vector<std::pair<unsigned char, ObjectRef>> stack_;
 public:
-    Frame(TypeRef type, std::shared_ptr<Code> code, int offset, std::map<std::string, ObjectRef> env);
-    std::string to_str() override;
+    Frame(TypeRef type, std::shared_ptr<const Code> code, unsigned int offset,
+          std::map<std::string, ObjectRef> env, unsigned int limit=-1, std::vector<std::pair<unsigned char, ObjectRef>> stack={});
     static TypeRef type;
 
-    ObjectRef execute();
-    void set_env(std::string name, ObjectRef value);
-    ObjectRef get_env(std::string name);
-    bool complete();
+    std::map<std::string, ObjectRef> execute() const;
+    ObjectRef get_env(std::string name) const;
+    bool complete() const;
+    std::shared_ptr<const Code> code() const { return code_; }
+    std::map<std::string, ObjectRef> env() const { return env_; }
 
     friend class ExecutionThunk;
 };
 
 
 class ExecutionThunk : public Thunk {
-    std::shared_ptr<Frame> frame;
+    std::shared_ptr<const Frame> frame;
 public:
-    ExecutionThunk(TypeRef type, std::shared_ptr<Frame> frame);
-    void notify(ObjectRef obj) override;
+    ExecutionThunk(TypeRef type, std::shared_ptr<const Frame> frame);
+    void notify(ObjectRef obj) const override;
 };
 
 class NameExtractThunk : public Thunk {
     std::string name;
 public:
     NameExtractThunk(TypeRef type, std::string name);
-    void notify(ObjectRef obj) override;
+    void notify(ObjectRef obj) const override;
 };
 
 #endif // FRAME_HPP
