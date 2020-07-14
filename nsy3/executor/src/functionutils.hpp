@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "object.hpp"
+#include "exception.hpp"
 
 // TODO: collapse fw into FunctionHolder, and then collapse FunctionHolder into BuiltinFunction (maybe).
 
@@ -75,6 +76,16 @@ template<class T, class... Args> std::function<std::shared_ptr<const T>(Args...)
 
 template<class T, class R, class... Args> std::function<R(const T*, Args...)> method(R(T::*meth)(Args...) const) {
     return {meth};
+}
+
+// Utils
+
+template<class T> T convert(const ObjectRef& obj) {
+    return convert_from_objref<T>::convert(obj);
+}
+
+template<class T> std::shared_ptr<const T> convert_ptr(const ObjectRef& obj) {
+    return convert_from_objref<std::shared_ptr<const T>>::convert(obj);
 }
 
 #endif // FUNCTIONUTILS_HPP

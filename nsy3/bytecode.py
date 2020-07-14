@@ -54,7 +54,7 @@ class BCode:
 
     def to_bytes(self):
         if self.arg_v:
-            arg = self.arg_v.pos if isinstance(self.arg_v, BCode) else self.arg_v
+            arg = self.arg_v.pos if isinstance(self.arg_v, BCode) else int(self.arg_v)
         else:
             arg = 0
         print(self.type, arg)
@@ -113,11 +113,14 @@ class Bytecode(metaclass=BCodeMeta):
     DROP = BCodeType("num")
     RETURN = BCodeType(subs=("expr"))
     GETENV = BCodeType()
-    # pos is either a position to jump to, or 0 to indicate a thunk return
+    # first half: pos is either a position to jump to, or 0 to indicate a thunk return
+    # second half: number of stack elements to keep
     SETSKIP = BCodeType("pos")
+    DUP = BCodeType("times")
 
     # Fake ops
 
     SEQ = BCodeType(subs=("ops"), emit=False)
     LABEL = BCodeType("id", emit=False)
     LINENO = BCodeType("lineno", emit=False)
+    IGNORE = BCodeType(emit=False)

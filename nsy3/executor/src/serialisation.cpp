@@ -1,6 +1,8 @@
 #include "serialisation.hpp"
 
 #include <stdexcept>
+#include <istream>
+#include <iostream>
 
 enum class SerialisationType : char {
     INT, FLOAT, STRING, DICT, SET, LIST, BYTES, TRUE, FALSE, NONE
@@ -49,6 +51,66 @@ std::pair<ObjectRef, unsigned int> deserialise(std::basic_string<unsigned char> 
         }
         default: {
             throw std::runtime_error("Unknown serialisation type");
+        }
+    }
+}
+
+ObjectRef deserialise_from_file(std::istream& stream) {
+    auto type = static_cast<SerialisationType>(stream.get());
+    std::cerr << static_cast<int>(type) << std::endl;
+    switch (type) {
+        case SerialisationType::INT: {
+            char bytes[4];
+            stream.read(bytes, 4);
+            return create<Integer>(*reinterpret_cast<int*>(bytes));
+        }
+        case SerialisationType::FLOAT: {
+            char bytes[8];
+            stream.read(bytes, 8);
+            return create<Float>(*reinterpret_cast<double*>(bytes));
+        }
+        case SerialisationType::STRING: {
+            char bytes[4];
+            stream.read(bytes, 4);
+            auto len = *reinterpret_cast<unsigned int*>(bytes);
+            auto str = std::string(len, '\0');
+            stream.read(str.data(), len);
+            return create<String>(str);
+        }
+        case SerialisationType::LIST: {
+            char bytes[4];
+            stream.read(bytes, 4);
+            auto len = *reinterpret_cast<unsigned int*>(bytes);
+            std::cerr << " " << len << std::endl;
+            std::vector<ObjectRef> objs;
+            for (auto i = 0u; i < len; ++i) {
+                objs.push_back(deserialise_from_file(stream));
+            }
+            return create<List>(objs);
+        }
+        case SerialisationType::DICT: {
+            char bytes[4];
+            stream.read(bytes, 4);
+            auto len = *reinterpret_cast<unsigned int*>(bytes);
+            ObjectRefMap objs;
+            for (auto i = 0u; i < len; ++i) {
+                auto key = deserialise_from_file(stream);
+                auto value = deserialise_from_file(stream);
+                std::cerr << key << " " << value << " " << len << std::endl;
+                objs[key] = value;
+            }
+            return create<Dict>(objs);
+        }
+        case SerialisationType::BYTES: {
+            char bytes[4];
+            stream.read(bytes, 4);
+            auto len = *reinterpret_cast<unsigned int*>(bytes);
+            auto str = std::basic_string<unsigned char>(len, '\0');
+            stream.read(reinterpret_cast<char*>(str.data()), len);
+            return create<Bytes>(str);
+        }
+        default: {
+            throw std::runtime_error("Unknown serialisation type" + std::to_string(static_cast<int>(type)));
         }
     }
 }

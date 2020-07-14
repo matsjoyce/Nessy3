@@ -19,24 +19,27 @@ enum class Ops : unsigned char {
     DROP,
     RETURN,
     GETENV,
-    SETSKIP
+    SETSKIP,
+    DUP
 };
 
 class Code : public Object {
     std::basic_string<unsigned char> code;
     std::vector<ObjectRef> consts;
-    std::string fname;
+    std::string fname, modulename_;
     std::basic_string<unsigned char> linenotab;
 
 public:
     Code(TypeRef type, std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab);
+    Code(TypeRef type, ObjectRef header, ObjectRef body);
     static const unsigned int npos = -1;
     static std::shared_ptr<const Code> from_file(std::string fname);
 
-    void print() const;
+    void print(std::ostream& stream) const;
     static TypeRef type;
     unsigned int lineno_for_position(unsigned int position) const;
     std::string filename() const;
+    std::string modulename() const;
 
     friend class Frame;
 };

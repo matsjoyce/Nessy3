@@ -51,7 +51,7 @@ std::size_t Object::hash() const {
 }
 
 bool Object::eq(ObjectRef other) const {
-    return false;
+    return other.get() == this;
 }
 
 bool Object::to_bool() const {
@@ -149,7 +149,11 @@ TypeRef String::type = create<Type>("String", Type::attrmap{
             res.replace(i * a.size(), a.size(), a);
         }
         return res;
-    })}
+    })},
+    {"==", create<BuiltinFunction>([](std::string a, ObjectRef b) {
+        if (auto obj = dynamic_cast<const String*>(b.get())) return a == obj->get();
+        return false;
+    })},
 });
 
 String::String(TypeRef type, std::string v) : Object(type), value(v) {
@@ -276,4 +280,25 @@ void Thunk::notify(ObjectRef /*obj*/) const {
 void Thunk::finalize(ObjectRef obj) const {
     const_cast<Thunk*>(this)->finalized = true;
     execengine->finalize_thunk(std::dynamic_pointer_cast<const Thunk>(shared_from_this()), std::move(obj));
+}
+
+TypeRef Module::type = create<Type>("Module", Type::attrmap{
+    {"==", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+        return a->eq(b);
+    })},
+});
+
+Module::Module(TypeRef type, std::string name, std::map<std::string, ObjectRef> v) : Object(type), name(name), value(v) {
+}
+
+std::string Module::to_str() const {
+    return "Module(" + name + ")";
+}
+
+ObjectRef Module::getattr(std::string name) const {
+    auto iter = value.find(name);
+    if (iter == value.end()) {
+        return Object::getattr(name);
+    }
+    return iter->second;
 }

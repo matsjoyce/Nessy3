@@ -8,9 +8,15 @@
 
 ExecutionEngine::ExecutionEngine() {
     env_additions = {
-        {"test_thunk", create<BuiltinFunction>(std::function<ObjectRef(std::string)>(std::bind(&ExecutionEngine::test_thunk, this, std::placeholders::_1)))}
+        {"test_thunk", create<BuiltinFunction>(std::function<ObjectRef(std::string)>(std::bind(&ExecutionEngine::test_thunk, this, std::placeholders::_1)))},
+        {"import", create<BuiltinFunction>(std::function<ObjectRef(std::string)>(std::bind(&ExecutionEngine::import_, this, std::placeholders::_1)))}
     };
 }
+
+ObjectRef ExecutionEngine::import_(std::string name) {
+    return modules.at(name);
+}
+
 
 ObjectRef ExecutionEngine::test_thunk(std::string name) {
     auto tt = create<TestThunk>(this, name);
@@ -38,11 +44,29 @@ void ExecutionEngine::finish() {
 
 void ExecutionEngine::exec_file(std::string fname) {
     auto c = Code::from_file(fname);
-    c->print();
+    c->print(std::cerr);
     auto start_env = builtins;
     auto additions = env_additions;
     start_env.merge(additions);
-    create<Frame>(c, 0, start_env)->execute();
+    std::cerr << "Executing " << fname << std::endl;
+    auto frame = create<Frame>(c, 0, start_env);
+    auto end_env = frame->execute();
+    for (auto& mod : modules) {
+        // Startswith
+        if (mod.first.rfind(c->modulename() + ".", 0) == 0 && mod.first.rfind(".") == c->modulename().size()) {
+            end_env[mod.first.substr(mod.first.rfind(".") + 1)] = mod.second;
+        }
+    }
+    auto module = create<Module>(c->modulename(), end_env);
+    modules[c->modulename()] = module;
+}
+
+void ExecutionEngine::exec_runspec(ObjectRef runspec) {
+    auto runspec_dict = convert_ptr<Dict>(runspec);
+    for (auto item : convert_ptr<List>(runspec_dict->get().at(create<String>("files")))->get()) {
+        exec_file(convert<std::string>(item));
+    }
+    std::cerr << "Initial execution done" << std::endl;
 }
 
 void ExecutionEngine::subscribe_thunk(std::shared_ptr<const Thunk> source, std::shared_ptr<const Thunk> dest) {

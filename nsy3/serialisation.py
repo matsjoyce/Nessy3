@@ -71,3 +71,45 @@ def deserialise(bytes, pos=0):
         return False, pos + 1
     elif type is Type.none:
         return None, pos + 1
+
+
+def deserialise_from_file(f):
+    type = Type(f.read(1)[0])
+    if type is Type.int:
+        return struct.unpack("<i", f.read(4))[0]
+    elif type is Type.float:
+        return struct.unpack("<d", f.read(8))[0]
+    elif type is Type.string:
+        len, = struct.unpack("<I", f.read(4))
+        return f.read(len).decode()
+    elif type is Type.dict:
+        len, = struct.unpack("<I", f.read(4))
+        obj = {}
+        for _ in range(len):
+            k = deserialise_from_file(f)
+            v = deserialise_from_file(f)
+            obj[k] = v
+        return obj
+    elif type is Type.set:
+        len, = struct.unpack("<I", f.read(4))
+        obj = set()
+        for _ in range(len):
+            x = deserialise_from_file(f)
+            obj.add(x)
+        return obj
+    elif type is Type.list:
+        len, = struct.unpack("<I", f.read(4))
+        obj = []
+        for _ in range(len):
+            x = deserialise_from_file(f)
+            obj.append(x)
+        return obj
+    elif type is Type.bytes:
+        len, = struct.unpack("<I", f.read(4))
+        return f.read(len)
+    elif type is Type.true:
+        return True
+    elif type is Type.false:
+        return False
+    elif type is Type.none:
+        return None

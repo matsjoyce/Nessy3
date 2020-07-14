@@ -39,9 +39,9 @@ class NSY2Lexer(Lexer):
     tokens = {NAME, AT, DOLLER, NUMBER, STRING, DOT, COMMA, EQEQ, ARROW, LAMBDA, NEQ, EQ,
               PLUSEQ, PLUS, MINUSEQ, MINUS, STAREQ, STAR, STARSTAREQ, STARSTAR, SLASHEQ, SLASH, SLASHSLASHEQ, SLASHSLASH, PERCENTEQ, PERCENT,
               LBRAK, RBRAK, LPAREN, RPAREN, LCURLY, RCURLY, LTE, GTE, LT, GT, COLON, TRUE, FALSE, IF, ELSE, ELIF, FOR, WHILE,
-              IN, AND, OR, NOT, DEF, RETURN, BREAK, CONTINUE, PASS, ASSERT, WHITESPACE, INDENT, DEDENT, NEWLINE}
+              IN, AND, OR, NOT, DEF, RETURN, BREAK, CONTINUE, PASS, ASSERT, IMPORT, FROM, AS, WHITESPACE, INDENT, DEDENT, NEWLINE}
 
-    NAME = r"[a-zA-Z_]\w*"
+    NAME = r"[a-zA-Z_][a-zA-Z_0-9']*"
     AT = r"@"
     DOLLER = r"\$"
     EQEQ = r"=="
@@ -93,6 +93,9 @@ class NSY2Lexer(Lexer):
     NAME["continue"] = CONTINUE
     NAME["pass"] = PASS
     NAME["assert"] = ASSERT
+    NAME["import"] = IMPORT
+    NAME["from"] = FROM
+    NAME["as"] = AS
 
     @_(r"[0-9]+(\.[0-9])?")
     def NUMBER(self, t):
@@ -114,7 +117,10 @@ class NSY2Lexer(Lexer):
         self.lineno += t.value.count("\n")
         return t
 
-    ignore_comment = r'[ \t\n]*\#.*\n[\s\n]*'
+    @_(r'[ \t\n]*\#.*\n[\s\n]*')
+    def ignore_comment(self, t):
+        self.lineno += t.value.count("\n")
+        return t
 
     def error(self, t):
         raise RuntimeError(f"Illegal character {t.value[0]!r}")
@@ -293,6 +299,58 @@ class NSY2Parser(Parser):
     def stmt(self, p):
         return ast.AssignStmt(p, p.NAME, ast.Func(p, p.defargs, p.block))
 
+    @_("IMPORT modname")
+    def stmt(self, p):
+        return ast.ImportStmt(p, p.modname, None)
+
+    @_("IMPORT modname AS NAME")
+    def stmt(self, p):
+        return ast.ImportStmt(p, p.modname, [("_", p.NAME)])
+
+    @_("FROM dotsmodname IMPORT modfromnames")
+    def stmt(self, p):
+        return ast.ImportStmt(p, p.dotsmodname, p.modfromnames)
+
+    @_("NAME")
+    def modfromname(self, p):
+        return (p.NAME, p.NAME)
+
+    @_("NAME AS NAME")
+    def modfromname(self, p):
+        return (p.NAME0, p.NAME1)
+
+    @_("modfromname")
+    def modfromnames(self, p):
+        return [p.modfromname]
+
+    @_("modfromnames COMMA modfromname")
+    def modfromnames(self, p):
+        return p.modfromnames + [p.modfromname]
+
+    @_("DOT")
+    def dots(self, p):
+        return ["."]
+
+    @_("dots DOT")
+    def dots(self, p):
+        return p.dots + ["."]
+
+    @_("dots modname")
+    def dotsmodname(self, p):
+        return p.dots + p.modname
+
+    @_("modname")
+    def dotsmodname(self, p):
+        return p.modname
+
+    @_("NAME")
+    def modname(self, p):
+        return [p.NAME]
+
+    @_("modname DOT NAME")
+    def modname(self, p):
+        return p.modname + [p.NAME]
+
     @_("LPAREN expr RPAREN")
     def expr(self, p):
         return p.expr
@@ -359,7 +417,7 @@ class NSY2Parser(Parser):
 
     @_("expr DOT NAME %prec DOT")
     def expr(self, p):
-        return ast.Binop(p, ".", p.expr, p.NAME)
+        return ast.Getattr(p, p.expr, p.NAME)
 
     @_(
         # Arith

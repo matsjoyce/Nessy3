@@ -41,3 +41,12 @@ y3["a"] or y3["\n"] and not y3["c"]
 
 if z:
     pass
+
+import a
+from .a import a
+from ...a import a
+from .a.b.c import a
+import x as b
+from x import a
+from x import a as b
+from x import a as b, c, d, e as f

@@ -5,12 +5,24 @@ from . import ast, bytecode, serialisation
 from .bytecode import Bytecode
 
 
-RETURN_SKIP = 2 ** 32 - 1
+RETURN_SKIP = 2 ** 16 - 1
+
+
+class Combine:
+    def __init__(self, a, b):
+        self.a, self.b = a, b
+
+    def __str__(self):
+        return f"{self.a} | {self.b}"
+
+    def __index__(self):
+        return ((self.a.pos if isinstance(self.a, bytecode.BCode) else self.a) & 0xFFFF) + (self.b << 16)
 
 
 class CompiledCode:
-    def __init__(self, fname):
+    def __init__(self, fname, modname):
         self.fname = fname
+        self.modname = modname
         self.counter = itertools.count()
         self.variables = {}
         self.globals = {}
@@ -19,6 +31,8 @@ class CompiledCode:
         self.consts = []
         self.functions = []
         self.code = None
+        self.stacksave = 0
+        self.imports = []
 
     def lookup_var(self, name):
         if name not in self.variables:
@@ -88,18 +102,36 @@ class CompiledCode:
         full_code.resolve_labels()
         linenotab = self.create_linenotab(full_code.linearize())
         full_code.resolve_labels()
-        return serialisation.serialise({
-            "consts": [(c.pos if isinstance(c, bytecode.BCode) else c) for c in self.consts],
+        header = serialisation.serialise({
             "fname": str(self.fname.resolve()),
+            "imports": self.imports,
+            "name": self.modname
+        })
+        body = serialisation.serialise({
+            "consts": [(c.pos if isinstance(c, bytecode.BCode) else c) for c in self.consts],
             "linenotab": linenotab,
             "code": b"".join(full_code.to_bytes())
         })
+        return header + body
 
     def to_str(self):
         stuff = ["Consts:", str(self.consts), "", "Code:", self.code.to_str()]
         for i, function in enumerate(self.functions):
             stuff.extend(["", f"F{i}:", function.to_str()])
         return "\n".join(stuff)
+
+    def add_import(self, name):
+        if name[0] == ".":
+            raise RuntimeError("IMP ...")
+        absolute_name = ".".join(name)
+        self.imports.append(absolute_name)
+        return absolute_name
+
+    def savestack(self, num):
+        self.stacksave += num
+
+    def setskip(self, pos):
+        return Bytecode.SETSKIP(Combine(pos, self.stacksave))
 
 
 def compile_expr_iter(a, ctx):
@@ -110,10 +142,9 @@ def compile_expr_iter(a, ctx):
         if a.op in ["and", "or"]:
             # Short circuiting
             return ...
-        elif a.op == ".":
-            yield Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.right))
-            return
         yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.op)), compile_expr(a.right, ctx))
+    elif isinstance(a, ast.Getattr):
+        yield Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.right))
     elif isinstance(a, ast.Monop):
         yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.value, ctx), ctx.const("unary_" + a.op)))
     elif isinstance(a, ast.Call):
@@ -169,20 +200,20 @@ def compile_stmt(a, ctx):
             raise RuntimeError()
         yield Bytecode.JUMP(labels[0])
     elif isinstance(a, ast.Return):
-        yield Bytecode.SETSKIP(RETURN_SKIP)
+        yield ctx.setskip(RETURN_SKIP)
         yield Bytecode.RETURN(compile_expr(a.expr, ctx))
     elif isinstance(a, ast.Block):
         for s in a.stmts:
             yield from compile_stmt(s, ctx)
     elif isinstance(a, ast.ExprStmt):
         skip_label = ctx.label()
-        yield Bytecode.SETSKIP(skip_label)
+        yield ctx.setskip(skip_label)
         yield compile_expr(a.expr, ctx)
         yield Bytecode.DROP(1)
         yield skip_label
     elif isinstance(a, ast.AssignStmt):
         skip_label = ctx.label()
-        yield Bytecode.SETSKIP(skip_label)
+        yield ctx.setskip(skip_label)
         yield Bytecode.SET(ctx.const(a.name, wrap=False), compile_expr(a.expr, ctx))
         yield skip_label
     elif isinstance(a, ast.IfStmt):
@@ -191,9 +222,9 @@ def compile_stmt(a, ctx):
         else_comp = Bytecode.SEQ(*list(compile_stmt(a.else_block, ctx)))
         # If there is a return statement in either block, the skip must be a return skip to avoid another return statement executing
         if any(op.type == Bytecode.RETURN for op in itertools.chain(if_comp.linearize(), else_comp.linearize())):
-            yield Bytecode.SETSKIP(RETURN_SKIP)
+            yield ctx.setskip(RETURN_SKIP)
         else:
-            yield Bytecode.SETSKIP(end_label)
+            yield ctx.setskip(end_label)
         yield Bytecode.JUMP_IFNOT(else_label, compile_expr(a.expr, ctx))
         yield if_comp
         yield Bytecode.JUMP(end_label)
@@ -206,9 +237,9 @@ def compile_stmt(a, ctx):
         block_comp = Bytecode.SEQ(*list(compile_stmt(a.block, ctx)))
         # If there is a return statement in the block, the skip must be a return skip to avoid another return statement executing
         if any(op.type == Bytecode.RETURN for op in block_comp.linearize()):
-            yield Bytecode.SETSKIP(RETURN_SKIP)
+            yield ctx.setskip(RETURN_SKIP)
         else:
-            yield Bytecode.SETSKIP(end_label)
+            yield ctx.setskip(end_label)
         yield start_label
         yield Bytecode.JUMP_IFNOT(end_label, compile_expr(a.expr, ctx))
         yield from compile_stmt(a.block, ctx)
@@ -217,9 +248,30 @@ def compile_stmt(a, ctx):
         ctx.pop_loop()
     elif isinstance(a, ast.Assert):
         skip_label = ctx.label()
-        yield Bytecode.SETSKIP(skip_label)
+        yield ctx.setskip(skip_label)
         yield Bytecode.CALL(Bytecode.GET(ctx.const("assert", wrap=False)), compile_expr(a.expr, ctx))
+        yield Bytecode.DROP(1)
         yield skip_label
+    elif isinstance(a, ast.ImportStmt):
+        skip_label = ctx.label()
+        modname = ctx.add_import(a.modname)
+        if a.names is None:
+            yield Bytecode.SET(ctx.const(a.modname[0], wrap=False), Bytecode.CALL(Bytecode.GET(ctx.const("import", wrap=False)), ctx.const(a.modname[0])))
+        else:
+            yield Bytecode.CALL(Bytecode.GET(ctx.const("import", wrap=False)), ctx.const(modname))
+            yield Bytecode.DUP(len(a.names) - 1)
+            ctx.savestack(len(a.names))
+            for modname, varname in a.names:
+                ctx.savestack(-1)
+                if modname == "_":
+                    yield Bytecode.SET(ctx.const(varname, wrap=False), Bytecode.IGNORE())
+                else:
+                    # This is a name = mod.name where we know that mod is not a thunk and so thunks can be ignored.
+                    # This is not taken advantage of, but might be in the future.
+                    skip_label = ctx.label()
+                    yield ctx.setskip(skip_label)
+                    yield Bytecode.SET(ctx.const(varname, wrap=False), Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const(modname)))
+                    yield skip_label
     elif isinstance(a, ast.ForStmt):
         return ...
     #elif isinstance(a, ast.):
@@ -227,7 +279,7 @@ def compile_stmt(a, ctx):
         raise RuntimeError(f"Cannot compile {type(a)} to IR.")
 
 
-def compile(a, fname):
-    ctx = CompiledCode(fname)
+def compile(a, fname, modname):
+    ctx = CompiledCode(fname, modname)
     ctx.code = Bytecode.SEQ(*list(compile_stmt(a, ctx)), Bytecode.RETURN(ctx.const(0)))
     return ctx

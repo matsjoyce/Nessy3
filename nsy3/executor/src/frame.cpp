@@ -24,12 +24,16 @@ ObjectRef Frame::get_env(std::string name) const {
 
 inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const Frame& frame, const std::basic_string<unsigned char>& code,
                        const std::vector<ObjectRef>& consts, std::vector<std::pair<unsigned char, ObjectRef>>& stack,
-                       unsigned int& position, std::map<std::string, ObjectRef>& env, unsigned int skip_position
+                       unsigned int& position, std::map<std::string, ObjectRef>& env, unsigned int skip_position, unsigned int skip_save_stack
                        ) {
     if (auto thunk = dynamic_cast<const Thunk*>(item.get())) {
-        if (skip_position != static_cast<unsigned int>(-1)) {
+        if (skip_position != 0xFFFF) {
             std::vector<std::pair<unsigned char, ObjectRef>> sf_stack;
-            std::swap(stack, sf_stack);
+            sf_stack.reserve(stack.size() - skip_save_stack);
+            for (auto iter = stack.begin() + skip_save_stack; iter != stack.end(); ++iter) {
+                sf_stack.emplace_back(*iter);
+            }
+            stack.erase(stack.begin() + skip_save_stack, stack.end());
             auto subframe = create<Frame>(frame.code(), position, env, skip_position, sf_stack);
 
             auto exec_thunk = create<ExecutionThunk>(thunk->execution_engine(), subframe);
@@ -72,7 +76,7 @@ std::map<std::string, ObjectRef> Frame::execute() const {
     auto stack = stack_;
     auto position = position_;
     auto env = env_;
-    unsigned int skip_position = 0;
+    unsigned int skip_position = 0, skip_save_stack = 0;
     while (position < limit_) {
         auto op = static_cast<Ops>(code[position]);
         auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
@@ -91,7 +95,7 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 }
                 auto obj = stack.back().second;
                 stack.pop_back();
-                position = stack_push(0, obj->getattr(name->get()), *this, code, consts, stack, position, env, skip_position);
+                position = stack_push(0, obj->getattr(name->get()), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
                 break;
             }
             case Ops::CALL: {
@@ -103,7 +107,7 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 stack.erase(pos_iter, stack.end());
                 auto func = stack.back().second;
                 stack.pop_back();
-                position = stack_push(0, func->call(args), *this, code, consts, stack, position, env, skip_position);
+                position = stack_push(0, func->call(args), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
                 break;
             }
             case Ops::GET: {
@@ -115,7 +119,7 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 if (iter == env.end()) {
                     create<NameException>("Name '" + name->get() + "' is not defined")->raise();
                 }
-                position = stack_push(0, iter->second, *this, code, consts, stack, position, env, skip_position);
+                position = stack_push(0, iter->second, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
                 break;
             }
             case Ops::SET: {
@@ -164,7 +168,15 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 break;
             }
             case Ops::SETSKIP: {
-                skip_position = arg;
+                skip_position = arg & 0xFFFF;
+                skip_save_stack = arg >> 16;
+                break;
+            }
+            case Ops::DUP: {
+                auto obj = stack.back().second;
+                for (auto i = 0u; i < arg; ++i) {
+                    stack.emplace_back(std::make_pair(0, obj));
+                }
                 break;
             }
             default: {

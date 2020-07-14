@@ -1,16 +1,19 @@
 #include <iostream>
+#include <fstream>
 
 #include "docopt/docopt.h"
 
 #include "executionengine.hpp"
 #include "exception.hpp"
+#include "serialisation.hpp"
 
 
 static const char USAGE[] =
 R"(fs
 
     Usage:
-        executor <files>...
+        executor runspec <rsfile>
+        executor run <files>...
 
     Options:
         -h --help                        Show this screen.
@@ -20,31 +23,45 @@ R"(fs
 
 int main(int argc, const char** argv) {
     auto args = docopt::docopt(USAGE, {argv + 1, argv + argc}, true, "executor 0.1");
-    auto files = args["<files>"].asStringList();
-    auto execengine = ExecutionEngine();
-    try {
-        for (auto f : files) {
-            execengine.exec_file(f);
-        }
-        execengine.finish();
-    }
-    catch (const ObjectRef& exc) {
-        if (auto cast_exc = std::dynamic_pointer_cast<const Exception>(exc)) {
-            std::cerr << cast_exc->to_str() << std::endl;
+    ObjectRef runspec;
+    if (args["runspec"].asBool()) {
+        if (args["<rsfile>"].asString() == "-") {
+            runspec = deserialise_from_file(std::cin);
         }
         else {
-            std::cerr << "NOT AN EXC!!! " << exc << std::endl;
+            std::ifstream f(args["<rsfile>"].asString());
+            runspec = deserialise_from_file(f);
         }
-        return 1;
     }
-    catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
-        return 1;
+    else {
+        auto files = args["<files>"].asStringList();
+//         runspec = create<Dict>({
+//         {create<String>("files"), create}
+//         })
+//         runspec[create<String>("files"] = files;
     }
-    catch (...) {
-        std::cerr << "Unknown exception" << std::endl;
-        return 1;
-    }
+    auto execengine = ExecutionEngine();
+//     try {
+        execengine.exec_runspec(runspec);
+        execengine.finish();
+//     }
+//     catch (const ObjectRef& exc) {
+//         if (auto cast_exc = std::dynamic_pointer_cast<const Exception>(exc)) {
+//             std::cerr << cast_exc->to_str() << std::endl;
+//         }
+//         else {
+//             std::cerr << "NOT AN EXC!!! " << exc << std::endl;
+//         }
+//         return 1;
+//     }
+//     catch (const std::exception& e) {
+//         std::cerr << e.what() << std::endl;
+//         return 1;
+//     }
+//     catch (...) {
+//         std::cerr << "Unknown exception" << std::endl;
+//         return 1;
+//     }
 
     return 0;
 }

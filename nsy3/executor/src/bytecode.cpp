@@ -19,30 +19,28 @@ std::shared_ptr<const Code> Code::from_file(std::string fname) {
         throw std::runtime_error("Could not open file");
     }
 
-    std::basic_string<unsigned char> ux;
-    {
-        std::stringstream buffer;
-        buffer << f.rdbuf();
-        auto x = buffer.str();
-        ux = std::basic_string<unsigned char>(reinterpret_cast<unsigned char*>(x.data()), x.size());
-    }
-    auto [header, pos] = deserialise(ux, 0);
-    auto header_map = convert_from_objref<std::map<std::string, ObjectRef>>::convert(header);
-    return create<Code>(
-        convert_from_objref<std::basic_string<unsigned char>>::convert(header_map["code"]),
-        convert_from_objref<std::vector<ObjectRef>>::convert(header_map["consts"]),
-        convert_from_objref<std::string>::convert(header_map["fname"]),
-        convert_from_objref<std::basic_string<unsigned char>>::convert(header_map["linenotab"])
-    );
+    auto header = deserialise_from_file(f);
+    auto body = deserialise_from_file(f);
+    return create<Code>(header, body);
 }
 
-void Code::print() const {
-    std::cout << "Compiled from " << fname << std::endl;
-    std::cout << "Consts:" << std::endl;
+Code::Code(TypeRef type, ObjectRef header, ObjectRef body) : Object(type) {
+    auto header_map = convert<std::map<std::string, ObjectRef>>(header);
+    auto body_map = convert<std::map<std::string, ObjectRef>>(body);
+    code = convert<std::basic_string<unsigned char>>(body_map["code"]);
+    consts = convert<std::vector<ObjectRef>>(body_map["consts"]);
+    fname = convert<std::string>(header_map["fname"]);
+    linenotab = convert<std::basic_string<unsigned char>>(body_map["linenotab"]);
+    modulename_ = convert<std::string>(header_map["name"]);
+}
+
+void Code::print(std::ostream& stream) const {
+    stream << "Compiled from " << fname << "(" << modulename_ << ")\n";
+    stream << "Consts:\n";
     for (auto i = 0u; i < consts.size(); ++i) {
-        std::cout << "  " << i << ": " << consts[i] << std::endl;
+        stream << "  " << i << ": " << consts[i] << "\n";
     }
-    std::cout << std::endl << "Code:" << std::endl;
+    stream << "\nCode:\n";
     unsigned int pos = 0;
     unsigned int lineno = 0, lineno_bcode_pos = 0;
     auto linenotab_iter = linenotab.begin();
@@ -55,25 +53,26 @@ void Code::print() const {
             lineno_change = true;
         }
         if (lineno_change) {
-            std::cout << "Line " << lineno << std::endl;
+            stream << "Line " << lineno << "\n";
         }
         auto op = code[pos];
         auto arg = *reinterpret_cast<const unsigned int*>(code.data() + pos + 1);
-        std::cout << "  " << pos << ": ";
+        stream << "  " << pos << ": ";
         switch (static_cast<Ops>(op)) {
-            case Ops::KWARG: std::cout << "KWARG " << arg << std::endl; break;
-            case Ops::GETATTR: std::cout << "GETATTR " << arg << std::endl; break;
-            case Ops::CALL: std::cout << "CALL " << arg << std::endl; break;
-            case Ops::GET: std::cout << "GET " << arg << " (" << consts[arg] << ")" << std::endl; break;
-            case Ops::SET: std::cout << "SET " << arg << " (" << consts[arg] << ")" << std::endl; break;
-            case Ops::CONST: std::cout << "CONST " << arg << " (" << consts[arg] << ")" << std::endl; break;
-            case Ops::JUMP: std::cout << "JUMP " << arg << std::endl; break;
-            case Ops::JUMP_IFNOT: std::cout << "JUMP_NOTIF " << arg << std::endl; break;
-            case Ops::DROP: std::cout << "DROP " << arg << std::endl; break;
-            case Ops::RETURN: std::cout << "RETURN " << arg << std::endl; break;
-            case Ops::GETENV: std::cout << "GETENV " << arg << std::endl; break;
-            case Ops::SETSKIP: std::cout << "SETSKIP " << arg << std::endl; break;
-            default: std::cout << "UNKNOWN " << static_cast<unsigned int>(op) << " " << arg << std::endl; break;
+            case Ops::KWARG: stream << "KWARG " << arg << "\n"; break;
+            case Ops::GETATTR: stream << "GETATTR " << arg << "\n"; break;
+            case Ops::CALL: stream << "CALL " << arg << "\n"; break;
+            case Ops::GET: stream << "GET " << arg << " (" << consts[arg] << ")\n"; break;
+            case Ops::SET: stream << "SET " << arg << " (" << consts[arg] << ")\n"; break;
+            case Ops::CONST: stream << "CONST " << arg << " (" << consts[arg] << ")\n"; break;
+            case Ops::JUMP: stream << "JUMP " << arg << "\n"; break;
+            case Ops::JUMP_IFNOT: stream << "JUMP_NOTIF " << arg << "\n"; break;
+            case Ops::DROP: stream << "DROP " << arg << "\n"; break;
+            case Ops::RETURN: stream << "RETURN " << arg << "\n"; break;
+            case Ops::GETENV: stream << "GETENV " << arg << "\n"; break;
+            case Ops::SETSKIP: stream << "SETSKIP " << (arg & 0xFFFF) << " " << (arg >> 16) << "\n"; break;
+            case Ops::DUP: stream << "DUP " << arg << "\n"; break;
+            default: stream << "UNKNOWN " << static_cast<unsigned int>(op) << " " << arg << "\n"; break;
         }
         pos += 5;
     }
@@ -93,6 +92,9 @@ std::string Code::filename() const {
     return fname;
 }
 
+std::string Code::modulename() const {
+    return modulename_;
+}
 
 TypeRef Signature::type = create<Type>("Signature", Type::attrmap{
     {"__new__", create<BuiltinFunction>(constructor<Signature, std::vector<std::string>, std::vector<ObjectRef>, unsigned char>())}

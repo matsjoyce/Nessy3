@@ -13,7 +13,6 @@ class Object;
 using ObjectRef = std::shared_ptr<const Object>;
 class Type;
 using TypeRef = std::shared_ptr<const Type>;
-// List of objects that have been created (in the early phases of initialisation) without types
 
 class Object : public std::enable_shared_from_this<Object> {
     TypeRef type_;
@@ -25,7 +24,7 @@ public:
     virtual std::size_t hash() const;
     virtual bool eq(ObjectRef other) const;
     TypeRef obj_type() const;
-    ObjectRef getattr(std::string name) const;
+    virtual ObjectRef getattr(std::string name) const;
     virtual ObjectRef call(const std::vector<ObjectRef>& args) const;
 
     friend class Type;
@@ -213,6 +212,16 @@ public:
     virtual void notify(ObjectRef obj) const;
     void finalize(ObjectRef obj) const;
     ExecutionEngine* execution_engine() const { return execengine; }
+};
+
+class Module : public Object {
+    std::string name;
+    std::map<std::string, ObjectRef> value;
+public:
+    Module(TypeRef type, std::string name, std::map<std::string, ObjectRef> v);
+    std::string to_str() const override;
+    static TypeRef type;
+    ObjectRef getattr(std::string name) const override;
 };
 
 #endif // OBJECT_HPP

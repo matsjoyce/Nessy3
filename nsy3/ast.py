@@ -17,7 +17,7 @@ class ASTNode:
         except AttributeError:
             self.lineno = None
 
-    def as_str(self, prefix=""):
+    def to_str(self, prefix=""):
         return "\n".join(prefix + "  " * indent + text for indent, text in self.pprint())
 
 
@@ -59,6 +59,15 @@ class Binop(Expr):
 
     def pprint(self):
         return indent([(0, self.op), (0, "(")] + self.left.pprint() + [(0, ",")] + self.right.pprint() + [(0, ")")])
+
+
+@dataclasses.dataclass(repr=False)
+class Getattr(Expr):
+    left: Expr
+    right: str
+
+    def pprint(self):
+        return self.left.pprint() + [(0, "." + self.right)]
 
 
 @dataclasses.dataclass(repr=False)
@@ -204,3 +213,12 @@ class ForStmt(Stmt):
 
     def pprint(self):
         return [(0, "for " + self.name + " in")] + indent(self.expr.pprint()) + [(0, "do")] + indent(self.block.pprint())
+
+
+@dataclasses.dataclass(repr=False)
+class ImportStmt(Stmt):
+    modname: str
+    names: list
+
+    def pprint(self):
+        return [(0, "from " + str(self.modname) + " import " + (", ".join(f"{a} as {b}" for a, b in self.names) if self.names else "_"))]
