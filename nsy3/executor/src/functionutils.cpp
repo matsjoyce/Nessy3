@@ -14,6 +14,13 @@ unsigned char convert_from_objref<unsigned char>::convert(const ObjectRef& objre
     throw std::runtime_error("Not an int");
 }
 
+unsigned int convert_from_objref<unsigned int>::convert(const ObjectRef& objref) {
+    if (auto obj = dynamic_cast<const Integer*>(objref.get())) {
+        return obj->get();
+    }
+    throw std::runtime_error("Not an int");
+}
+
 double convert_from_objref<double>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const Numeric*>(objref.get())) {
         return obj->to_double();

@@ -32,6 +32,7 @@ class ExecutionThunk : public Thunk {
 public:
     ExecutionThunk(TypeRef type, ExecutionEngine* execengine, std::shared_ptr<const Frame> frame);
     void notify(ObjectRef obj) const override;
+    std::string to_str() const override;
 };
 
 class NameExtractThunk : public Thunk {
@@ -39,6 +40,7 @@ class NameExtractThunk : public Thunk {
 public:
     NameExtractThunk(TypeRef type, ExecutionEngine* execengine, std::string name);
     void notify(ObjectRef obj) const override;
+    std::string to_str() const override;
 };
 
 #endif // FRAME_HPP

@@ -442,17 +442,16 @@ class NSY2Parser(Parser):
         "DOLLER multipartname STARSTAREQ expr",
     )
     def simple_stmt(self, p):
-        old_value = ast.Call(p, ast.Name(p, "$?"), [ast.SequenceLiteral(p, "[]", p.multipartname), ast.SequenceLiteral(p, "[]", [ast.Literal(p, "partial")])])
-        return ast.ExprStmt(p, ast.Call(p, ast.Name(p, "$="), [ast.SequenceLiteral(p, "[]", p.multipartname),
-                                                      ast.Call(p, ast.Name(p, p[2][:-1]), [old_value, p.expr])]))
+        old_value = ast.DollarName(p, p.multipartname, ["partial"])
+        return ast.DollarSetStmt( p, p.multipartname, ast.Binop(p, p[2][:-1], old_value, p.expr), [])
 
-    @_("DOLLER multipartname EQ expr")
+    @_("DOLLER multipartname dflags EQ expr")
     def simple_stmt(self, p):
-        return ast.ExprStmt(p, ast.Call(p, ast.Name(p, "$="), [ast.SequenceLiteral(p, "[]", p.multipartname), p.expr]))
+        return ast.DollarSetStmt(p, p.multipartname, p.expr, p.dflags)
 
     @_("DOLLER multipartname dflags")
     def expr(self, p):
-        return ast.Call(p, ast.Name(p, "$?"), [ast.SequenceLiteral(p, "[]", p.multipartname), ast.SequenceLiteral(p, "[]", p.dflags)])
+        return ast.DollarName(p, p.multipartname, p.dflags)
 
     @_("NAME")
     def multipartname(self, p):

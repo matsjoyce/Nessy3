@@ -123,6 +123,15 @@ class Name(Expr):
         return [(0, self.name)]
 
 
+@dataclasses.dataclass(repr=False)
+class DollarName(Expr):
+    name: list
+    flags: list
+
+    def pprint(self):
+        return [(0, "$")] + [z for n in self.name for z in n.pprint()] + [(0, " ".join("@" + f for f in self.flags))]
+
+
 class Stmt(ASTNode):
     pass
 
@@ -184,6 +193,16 @@ class AssignStmt(Stmt):
 
     def pprint(self):
         return [(0, self.name + " =")] + self.expr.pprint()
+
+
+@dataclasses.dataclass(repr=False)
+class DollarSetStmt(Stmt):
+    name: list
+    expr: Expr
+    flags: list
+
+    def pprint(self):
+        return [(0, "$")] + [z for n in self.name for z in n.pprint()] + [(0, " ".join("@" + f for f in self.flags) + " =")] + self.expr.pprint()
 
 
 @dataclasses.dataclass(repr=False)

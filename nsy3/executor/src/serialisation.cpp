@@ -57,7 +57,6 @@ std::pair<ObjectRef, unsigned int> deserialise(std::basic_string<unsigned char> 
 
 ObjectRef deserialise_from_file(std::istream& stream) {
     auto type = static_cast<SerialisationType>(stream.get());
-    std::cerr << static_cast<int>(type) << std::endl;
     switch (type) {
         case SerialisationType::INT: {
             char bytes[4];
@@ -81,7 +80,6 @@ ObjectRef deserialise_from_file(std::istream& stream) {
             char bytes[4];
             stream.read(bytes, 4);
             auto len = *reinterpret_cast<unsigned int*>(bytes);
-            std::cerr << " " << len << std::endl;
             std::vector<ObjectRef> objs;
             for (auto i = 0u; i < len; ++i) {
                 objs.push_back(deserialise_from_file(stream));
@@ -96,7 +94,6 @@ ObjectRef deserialise_from_file(std::istream& stream) {
             for (auto i = 0u; i < len; ++i) {
                 auto key = deserialise_from_file(stream);
                 auto value = deserialise_from_file(stream);
-                std::cerr << key << " " << value << " " << len << std::endl;
                 objs[key] = value;
             }
             return create<Dict>(objs);

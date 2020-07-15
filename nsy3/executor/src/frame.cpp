@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 #include <iostream>
+#include <sstream>
 
 TypeRef Frame::type = create<Type>("Frame");
 
@@ -28,6 +29,7 @@ inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const
                        ) {
     if (auto thunk = dynamic_cast<const Thunk*>(item.get())) {
         if (skip_position != 0xFFFF) {
+            std::cerr << "Skip from " << position << " to " << skip_position << std::endl;
             std::vector<std::pair<unsigned char, ObjectRef>> sf_stack;
             sf_stack.reserve(stack.size() - skip_save_stack);
             for (auto iter = stack.begin() + skip_save_stack; iter != stack.end(); ++iter) {
@@ -54,6 +56,7 @@ inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const
             return skip_position;
         }
         else {
+            std::cerr << "Skip from " << position << " to return" << std::endl;
             auto subframe = create<Frame>(frame.code(), position, env, skip_position, stack);
             auto exec_thunk = create<ExecutionThunk>(thunk->execution_engine(), subframe);
             auto name_thunk = create<NameExtractThunk>(thunk->execution_engine(), "return");
@@ -76,7 +79,7 @@ std::map<std::string, ObjectRef> Frame::execute() const {
     auto stack = stack_;
     auto position = position_;
     auto env = env_;
-    unsigned int skip_position = 0, skip_save_stack = 0;
+    unsigned int skip_position = limit_, skip_save_stack = 0;
     while (position < limit_) {
         auto op = static_cast<Ops>(code[position]);
         auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
@@ -204,10 +207,23 @@ void ExecutionThunk::notify(ObjectRef obj) const {
     finalize(create<Dict>(objenv));
 }
 
+std::string ExecutionThunk::to_str() const {
+    std::stringstream ss;
+    ss << "ET(" << frame->position_ << "-" << frame->limit_ << ")";
+    return ss.str();
+}
+
+
 NameExtractThunk::NameExtractThunk(TypeRef type, ExecutionEngine* execengine, std::string name) : Thunk(type, execengine), name(name) {
 }
 
 void NameExtractThunk::notify(ObjectRef obj) const {
     auto env = std::dynamic_pointer_cast<const Dict>(obj);
     finalize(env->get().at(create<String>(name)));
+}
+
+std::string NameExtractThunk::to_str() const {
+    std::stringstream ss;
+    ss << "NT(" << name << ")";
+    return ss.str();
 }

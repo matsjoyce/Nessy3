@@ -35,7 +35,7 @@ Code::Code(TypeRef type, ObjectRef header, ObjectRef body) : Object(type) {
 }
 
 void Code::print(std::ostream& stream) const {
-    stream << "Compiled from " << fname << "(" << modulename_ << ")\n";
+    stream << "Compiled from " << fname << " (" << modulename_ << ")\n";
     stream << "Consts:\n";
     for (auto i = 0u; i < consts.size(); ++i) {
         stream << "  " << i << ": " << consts[i] << "\n";

@@ -7,6 +7,15 @@ from .bytecode import Bytecode
 
 RETURN_SKIP = 2 ** 16 - 1
 
+DOLLAR_GET_FLAGS = {
+    "partial": 1
+}
+
+DOLLAR_SET_FLAGS = {
+    "modification": 1,
+    "default": 2
+}
+
 
 class Combine:
     def __init__(self, a, b):
@@ -161,6 +170,11 @@ def compile_expr_iter(a, ctx):
         yield Bytecode.CALL(Bytecode.GET(ctx.const(a.type, wrap=False)), *[compile_expr(s, ctx) for s in a.seq])
     elif isinstance(a, ast.Name):
         yield Bytecode.GET(ctx.const(a.name, wrap=False))
+    elif isinstance(a, ast.DollarName):
+        flags = 0
+        for flag in a.flags:
+            flags |= DOLLAR_GET_FLAGS[flag]
+        yield Bytecode.CALL(Bytecode.GET(ctx.const("$?", wrap=False)), Bytecode.CALL(Bytecode.GET(ctx.const("[]", wrap=False)), *[compile_expr(n, ctx) for n in a.name]), ctx.const(flags))
     elif isinstance(a, ast.Func):
         func_label = ctx.add_function(Bytecode.SEQ(Bytecode.LINENO(a.lineno), *list(compile_stmt(a.stmt, ctx)), Bytecode.RETURN(ctx.const(0))))
         arg_names = []
@@ -215,6 +229,14 @@ def compile_stmt(a, ctx):
         skip_label = ctx.label()
         yield ctx.setskip(skip_label)
         yield Bytecode.SET(ctx.const(a.name, wrap=False), compile_expr(a.expr, ctx))
+        yield skip_label
+    elif isinstance(a, ast.DollarSetStmt):
+        skip_label = ctx.label()
+        yield ctx.setskip(skip_label)
+        flags = 0
+        for flag in a.flags:
+            flags |= DOLLAR_SET_FLAGS[flag]
+        yield Bytecode.CALL(Bytecode.GET(ctx.const("$=", wrap=False)), Bytecode.CALL(Bytecode.GET(ctx.const("[]", wrap=False)), *[compile_expr(n, ctx) for n in a.name]), compile_expr(a.expr, ctx), ctx.const(flags))
         yield skip_label
     elif isinstance(a, ast.IfStmt):
         else_label, end_label = ctx.label(), ctx.label()

@@ -12,6 +12,7 @@
 
 template<> struct convert_from_objref<int> { static int convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<unsigned char> { static unsigned char convert(const ObjectRef& objref); };
+template<> struct convert_from_objref<unsigned int> { static unsigned int convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<double> { static double convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<std::string> { static std::string convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<std::basic_string<unsigned char>> { static std::basic_string<unsigned char> convert(const ObjectRef& objref); };
@@ -76,6 +77,14 @@ template<class T, class... Args> std::function<std::shared_ptr<const T>(Args...)
 
 template<class T, class R, class... Args> std::function<R(const T*, Args...)> method(R(T::*meth)(Args...) const) {
     return {meth};
+}
+
+template<class T, class R, class... Args> std::function<R(Args...)> method_and_bind(T* t, R(T::*meth)(Args...)) {
+    return [=](Args... args){ return (t->*meth)(args...); };
+}
+
+template<class T, class R, class... Args> std::function<R(Args...)> method_and_bind(const T* t, R(T::*meth)(Args...) const) {
+    return [=](Args... args){ return (t->*meth)(t, args...); };
 }
 
 // Utils
