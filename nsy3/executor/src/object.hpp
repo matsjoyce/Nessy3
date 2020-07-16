@@ -20,6 +20,7 @@ public:
     Object(TypeRef type);
     virtual ~Object() = default;
     virtual std::string to_str() const;
+    static TypeRef type;
     virtual bool to_bool() const;
     virtual std::size_t hash() const;
     virtual bool eq(ObjectRef other) const;
@@ -27,7 +28,7 @@ public:
     virtual ObjectRef getattr(std::string name) const;
     virtual ObjectRef call(const std::vector<ObjectRef>& args) const;
 
-    friend class Type;
+    friend std::pair<TypeRef, TypeRef> make_top_types();
 };
 
 template<class T, class... Args> std::shared_ptr<const T> create(Args... args) {
@@ -38,17 +39,20 @@ std::ostream& operator<<(std::ostream& s, const ObjectRef& obj);
 
 class Type : public Object {
     std::string name_;
+    std::vector<TypeRef> bases_;
     std::map<std::string, ObjectRef> attrs;
-    static TypeRef make_type_type();
 public:
-    Type(TypeRef type, std::string name, std::map<std::string, ObjectRef> attr={});
+    Type(TypeRef type, std::string name, std::vector<TypeRef> bases, std::map<std::string, ObjectRef> attr={});
     std::string to_str() const override;
     static TypeRef type;
-    ObjectRef get(std::string name)const ;
+    ObjectRef getattr(std::string name) const override;
     ObjectRef call(const std::vector<ObjectRef>& args) const override;
     std::string name() const { return name_; }
 
     using attrmap = std::map<std::string, ObjectRef>;
+    using basevec = std::vector<TypeRef>;
+
+    friend std::pair<TypeRef, TypeRef> make_top_types();
 };
 
 struct AbstractFunctionHolder {

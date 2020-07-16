@@ -31,7 +31,10 @@ TypeRef Object::obj_type() const {
 }
 
 ObjectRef Object::getattr(std::string name) const {
-    auto obj = type_->get(name);
+    auto obj = type_->getattr(name);
+    if (!obj) {
+        create<NameException>("Object of type '" + type_->name() + "' has no attribute '" + name + "'")->raise();
+    }
     if (dynamic_cast<const BuiltinFunction*>(obj.get())) {
         return create<BoundMethod>(shared_from_this(), obj);
     }
@@ -58,36 +61,90 @@ bool Object::to_bool() const {
     return true;
 }
 
-TypeRef Type::make_type_type() {
-    auto obj = std::make_shared<Type>(nullptr, "Type");
-    obj->type_ = obj;
-    return obj;
+std::pair<TypeRef, TypeRef> make_top_types() {
+    auto type_type = std::make_shared<Type>(nullptr, "Type", Type::basevec{});
+    type_type->type_ = type_type;
+
+    auto unsupported_op = [](std::string op) {
+        return create<BuiltinFunction>([op](ObjectRef a, ObjectRef b) -> ObjectRef {
+            create<TypeException>(
+                "Objects of types '" + b->obj_type()->name()
+                + "' and '" + a->obj_type()->name() + "' do not support the operator '" + op + "'"
+            )->raise();
+            return {};
+        });
+    };
+
+    Type::attrmap obj_attrs = {
+        {"==", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) { return a.get() == b.get(); })},
+        {"!=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+            return !convert<bool>(a->getattr("==")->call({b}));
+        })},
+        {"<", unsupported_op("<")},
+        {">", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+            return !convert<bool>(a->getattr("==")->call({b})) && !convert<bool>(a->getattr("<")->call({b}));
+        })},
+        {"<=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+            return convert<bool>(a->getattr("==")->call({b})) || convert<bool>(a->getattr("<")->call({b}));
+        })},
+        {">=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+            return !convert<bool>(a->getattr("<")->call({b}));
+        })},
+    };
+
+    auto add_ref_op = [&](std::string op) {
+        auto rop = "r" + op;
+        obj_attrs[op] = create<BuiltinFunction>([rop](ObjectRef a, ObjectRef b) { return b->getattr(rop)->call({a}); });
+        obj_attrs[rop] = unsupported_op(op);
+    };
+
+    add_ref_op("+");
+    add_ref_op("-");
+    add_ref_op("*");
+    add_ref_op("/");
+    add_ref_op("//");
+    add_ref_op("%");
+    add_ref_op("**");
+
+    auto obj_type = std::make_shared<Type>(nullptr, "Type", Type::basevec{}, obj_attrs);
+    type_type->bases_ = {obj_type};
+    return {type_type, obj_type};
 }
 
-TypeRef Type::type = Type::make_type_type();
+static auto top_types = make_top_types();
+TypeRef Type::type = top_types.first;
+TypeRef Object::type = top_types.second;
 
-Type::Type(TypeRef type, std::string name, std::map<std::string, ObjectRef> attrs) : Object(type), name_(name), attrs(attrs) {
+Type::Type(TypeRef type, std::string name, std::vector<TypeRef> bases, std::map<std::string, ObjectRef> attrs) : Object(type), name_(name), bases_(bases), attrs(attrs) {
 }
 
 std::string Type::to_str() const {
     return "Type(" + name_ + ")";
 }
 
-ObjectRef Type::get(std::string name) const {
+ObjectRef Type::getattr(std::string name) const {
     auto iter = attrs.find(name);
     if (iter == attrs.end()) {
-        throw std::runtime_error("No such attr");
+        for (auto& base : bases_) {
+            if (auto obj = base->getattr(name)) {
+                return obj;
+            }
+        }
+        return {};
     }
     return iter->second;
 }
 
 ObjectRef Type::call(const std::vector<ObjectRef>& args) const {
-    return get("__new__")->call(args);
+    return getattr("__new__")->call(args);
 }
 
-TypeRef BuiltinFunction::type = create<Type>("BuiltinFunction");
+TypeRef BuiltinFunction::type = create<Type>("BuiltinFunction", Type::basevec{Object::type});
 
-TypeRef Integer::type = create<Type>("Integer", Type::attrmap{
+TypeRef Numeric::type = create<Type>("Numeric", Type::basevec{Object::type}, Type::attrmap{
+});
+
+TypeRef Integer::type = create<Type>("Integer", Type::basevec{Numeric::type}, Type::attrmap{
     {"+", create<BuiltinFunction>([](int a, int b) { return a + b; })},
     {"-", create<BuiltinFunction>([](int a, int b) { return a - b; })},
     {"*", create<BuiltinFunction>([](int a, int b) { return a * b; })},
@@ -112,7 +169,7 @@ bool Integer::to_bool() const {
     return value;
 }
 
-TypeRef Boolean::type = create<Type>("Boolean");
+TypeRef Boolean::type = create<Type>("Boolean", Type::basevec{Numeric::type});
 
 Boolean::Boolean(TypeRef type, bool v) : Integer(type, v) {
 }
@@ -121,7 +178,7 @@ std::string Boolean::to_str() const {
     return value ? "TRUE" : "FALSE";
 }
 
-TypeRef Float::type = create<Type>("Float", Type::attrmap{
+TypeRef Float::type = create<Type>("Float", Type::basevec{Numeric::type}, Type::attrmap{
     {"+", create<BuiltinFunction>([](double a, double b){ return a + b; })},
     {"-", create<BuiltinFunction>([](double a, double b){ return a - b; })},
     {"*", create<BuiltinFunction>([](double a, double b){ return a * b; })},
@@ -141,7 +198,7 @@ bool Float::to_bool() const {
     return value;
 }
 
-TypeRef String::type = create<Type>("String", Type::attrmap{
+TypeRef String::type = create<Type>("String", Type::basevec{Object::type}, Type::attrmap{
     {"+", create<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
     {"*", create<BuiltinFunction>([](std::string a, int b) {
         std::string res(a.size() * std::max(0, b), '\0');
@@ -162,7 +219,7 @@ String::String(TypeRef type, std::string v) : Object(type), value(v) {
 std::string String::to_str() const {
     return value;
 }
-TypeRef Bytes::type = create<Type>("Bytes", Type::attrmap{
+TypeRef Bytes::type = create<Type>("Bytes", Type::basevec{Object::type}, Type::attrmap{
     {"+", create<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
     {"*", create<BuiltinFunction>([](std::string a, int b) {
         std::string res(a.size() * std::max(0, b), '\0');
@@ -191,7 +248,7 @@ std::string Bytes::to_str() const {
     return "Bytes";
 }
 
-TypeRef BoundMethod::type = create<Type>("BoundMethod");
+TypeRef BoundMethod::type = create<Type>("BoundMethod", Type::basevec{Object::type});
 
 BoundMethod::BoundMethod(TypeRef type, ObjectRef self, ObjectRef func) : Object(type), self(self), func(func) {
 }
@@ -206,7 +263,7 @@ ObjectRef BoundMethod::call(const std::vector<ObjectRef>& args) const {
     return func->call(mod_args);
 }
 
-TypeRef Property::type = create<Type>("Property");
+TypeRef Property::type = create<Type>("Property", Type::basevec{Object::type});
 
 Property::Property(TypeRef type, ObjectRef func) : Object(type), func(func) {
 }
@@ -219,7 +276,7 @@ ObjectRef Property::call(const std::vector<ObjectRef>& args) const {
     return func->call(args);
 }
 
-TypeRef Dict::type = create<Type>("Dict");
+TypeRef Dict::type = create<Type>("Dict", Type::basevec{Object::type});
 
 Dict::Dict(TypeRef type, ObjectRefMap v) : Object(type), value(v) {
 }
@@ -239,7 +296,7 @@ std::string Dict::to_str() const {
     return ss.str();
 }
 
-TypeRef List::type = create<Type>("List");
+TypeRef List::type = create<Type>("List", Type::basevec{Object::type});
 
 List::List(TypeRef type, std::vector<ObjectRef> v) : Object(type), value(v) {
 }
@@ -259,7 +316,7 @@ std::string List::to_str() const {
     return ss.str();
 }
 
-TypeRef Thunk::type = create<Type>("Thunk");
+TypeRef Thunk::type = create<Type>("Thunk", Type::basevec{Object::type});
 
 Thunk::Thunk(TypeRef type, ExecutionEngine* execengine) : Object(type), execengine(execengine) {
 }
@@ -282,11 +339,7 @@ void Thunk::finalize(ObjectRef obj) const {
     execengine->finalize_thunk(std::dynamic_pointer_cast<const Thunk>(shared_from_this()), std::move(obj));
 }
 
-TypeRef Module::type = create<Type>("Module", Type::attrmap{
-    {"==", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
-        return a->eq(b);
-    })},
-});
+TypeRef Module::type = create<Type>("Module", Type::basevec{Object::type});
 
 Module::Module(TypeRef type, std::string name, std::map<std::string, ObjectRef> v) : Object(type), name(name), value(v) {
 }

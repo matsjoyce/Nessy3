@@ -109,6 +109,7 @@ class Bytecode(metaclass=BCodeMeta):
     SET = BCodeType("name", ("value"))
     CONST = BCodeType("value")
     JUMP = BCodeType("pos")
+    JUMP_IF = BCodeType("pos", ("cond"))
     JUMP_IFNOT = BCodeType("pos", ("cond"))
     DROP = BCodeType("num")
     RETURN = BCodeType(subs=("expr"))

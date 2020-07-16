@@ -14,6 +14,7 @@ template<> struct convert_from_objref<int> { static int convert(const ObjectRef&
 template<> struct convert_from_objref<unsigned char> { static unsigned char convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<unsigned int> { static unsigned int convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<double> { static double convert(const ObjectRef& objref); };
+template<> struct convert_from_objref<bool> { static bool convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<std::string> { static std::string convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<std::basic_string<unsigned char>> { static std::basic_string<unsigned char> convert(const ObjectRef& objref); };
 template<> struct convert_from_objref<ObjectRef> { static ObjectRef convert(const ObjectRef& objref); };

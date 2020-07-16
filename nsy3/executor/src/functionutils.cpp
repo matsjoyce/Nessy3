@@ -28,6 +28,10 @@ double convert_from_objref<double>::convert(const ObjectRef& objref) {
     throw std::runtime_error("Not numeric");
 }
 
+bool convert_from_objref<bool>::convert(const ObjectRef& objref) {
+    return objref->to_bool();
+}
+
 std::string convert_from_objref<std::string>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const String*>(objref.get())) {
         return obj->get();

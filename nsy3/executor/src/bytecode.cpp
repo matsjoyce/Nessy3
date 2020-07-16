@@ -7,7 +7,7 @@
 #include <sstream>
 #include <iostream>
 
-TypeRef Code::type = create<Type>("Code");
+TypeRef Code::type = create<Type>("Code", Type::basevec{Object::type});
 
 Code::Code(TypeRef type, std::basic_string<unsigned char> code, std::vector<ObjectRef> consts, std::string fname, std::basic_string<unsigned char> linenotab)
     : Object(type), code(code), consts(consts), fname(fname), linenotab(linenotab) {
@@ -66,7 +66,8 @@ void Code::print(std::ostream& stream) const {
             case Ops::SET: stream << "SET " << arg << " (" << consts[arg] << ")\n"; break;
             case Ops::CONST: stream << "CONST " << arg << " (" << consts[arg] << ")\n"; break;
             case Ops::JUMP: stream << "JUMP " << arg << "\n"; break;
-            case Ops::JUMP_IFNOT: stream << "JUMP_NOTIF " << arg << "\n"; break;
+            case Ops::JUMP_IF: stream << "JUMP_IF " << arg << "\n"; break;
+            case Ops::JUMP_IFNOT: stream << "JUMP_IFNOT " << arg << "\n"; break;
             case Ops::DROP: stream << "DROP " << arg << "\n"; break;
             case Ops::RETURN: stream << "RETURN " << arg << "\n"; break;
             case Ops::GETENV: stream << "GETENV " << arg << "\n"; break;
@@ -96,7 +97,7 @@ std::string Code::modulename() const {
     return modulename_;
 }
 
-TypeRef Signature::type = create<Type>("Signature", Type::attrmap{
+TypeRef Signature::type = create<Type>("Signature", Type::basevec{Object::type}, Type::attrmap{
     {"__new__", create<BuiltinFunction>(constructor<Signature, std::vector<std::string>, std::vector<ObjectRef>, unsigned char>())}
 });
 
@@ -125,7 +126,7 @@ std::string Signature::to_str() const {
     return "Signature(" + res + ")";
 }
 
-TypeRef Function::type = create<Type>("Function", Type::attrmap{
+TypeRef Function::type = create<Type>("Function", Type::basevec{Object::type}, Type::attrmap{
     {"signature", create<Property>(create<BuiltinFunction>(method(&Function::signature)))}
 });
 

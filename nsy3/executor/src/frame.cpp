@@ -7,7 +7,7 @@
 #include <iostream>
 #include <sstream>
 
-TypeRef Frame::type = create<Type>("Frame");
+TypeRef Frame::type = create<Type>("Frame", Type::basevec{Object::type});
 
 Frame::Frame(TypeRef type, std::shared_ptr<const Code> code, unsigned int offset,
              std::map<std::string, ObjectRef> env, unsigned int limit, std::vector<std::pair<unsigned char, ObjectRef>> stack)
@@ -140,6 +140,14 @@ std::map<std::string, ObjectRef> Frame::execute() const {
             }
             case Ops::JUMP: {
                 position = arg;
+                break;
+            }
+            case Ops::JUMP_IF: {
+                auto obj = stack.back().second;
+                stack.pop_back();
+                if (obj->to_bool()) {
+                    position = arg;
+                }
                 break;
             }
             case Ops::JUMP_IFNOT: {

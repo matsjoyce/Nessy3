@@ -15,6 +15,7 @@ enum class Ops : unsigned char {
     SET,
     CONST,
     JUMP,
+    JUMP_IF,
     JUMP_IFNOT,
     DROP,
     RETURN,

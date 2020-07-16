@@ -144,18 +144,35 @@ class CompiledCode:
 
 
 def compile_expr_iter(a, ctx):
-    print(a)
     if a.lineno:
         yield Bytecode.LINENO(a.lineno)
     if isinstance(a, ast.Binop):
-        if a.op in ["and", "or"]:
-            # Short circuiting
-            return ...
-        yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.op)), compile_expr(a.right, ctx))
+        # Short circuiting
+        if a.op == "and":
+            end_label = ctx.label()
+            yield compile_expr(a.left, ctx)
+            yield Bytecode.DUP(1)
+            yield Bytecode.JUMP_IFNOT(end_label)
+            yield Bytecode.DROP(1)
+            yield compile_expr(a.right, ctx)
+            yield end_label
+        elif a.op == "or":
+            end_label = ctx.label()
+            yield compile_expr(a.left, ctx)
+            yield Bytecode.DUP(1)
+            yield Bytecode.JUMP_IF(end_label)
+            yield Bytecode.DROP(1)
+            yield compile_expr(a.right, ctx)
+            yield end_label
+        else:
+            yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.op)), compile_expr(a.right, ctx))
     elif isinstance(a, ast.Getattr):
         yield Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.right))
     elif isinstance(a, ast.Monop):
-        yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.value, ctx), ctx.const("unary_" + a.op)))
+        if a.op == "not":
+            yield Bytecode.CALL(Bytecode.GET(ctx.const("not", wrap=False)), compile_expr(a.value, ctx))
+        else:
+            yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.value, ctx), ctx.const("unary_" + a.op)))
     elif isinstance(a, ast.Call):
         args = []
         for arg in a.args:
@@ -200,7 +217,6 @@ def compile_expr(*args, **kwargs):
 def compile_stmt(a, ctx):
     if a.lineno:
         yield Bytecode.LINENO(a.lineno)
-    print(a)
     if isinstance(a, ast.Pass):
         return
     elif isinstance(a, ast.Break):
@@ -237,6 +253,7 @@ def compile_stmt(a, ctx):
         for flag in a.flags:
             flags |= DOLLAR_SET_FLAGS[flag]
         yield Bytecode.CALL(Bytecode.GET(ctx.const("$=", wrap=False)), Bytecode.CALL(Bytecode.GET(ctx.const("[]", wrap=False)), *[compile_expr(n, ctx) for n in a.name]), compile_expr(a.expr, ctx), ctx.const(flags))
+        yield Bytecode.DROP(1)
         yield skip_label
     elif isinstance(a, ast.IfStmt):
         else_label, end_label = ctx.label(), ctx.label()
@@ -296,7 +313,6 @@ def compile_stmt(a, ctx):
                     yield skip_label
     elif isinstance(a, ast.ForStmt):
         return ...
-    #elif isinstance(a, ast.):
     else:
         raise RuntimeError(f"Cannot compile {type(a)} to IR.")
 

@@ -1,0 +1,18 @@
+def f1(a, b, c=1, d=4):
+    return a + b * 10 + c * 100 + d * 1000
+
+print("Assertions: 7")
+
+assert f1(1, 2) == 4121
+assert f1(10, 2) == 4130
+assert f1(1, 2, 3) == 4321
+assert f1(1, 2, 3, 5) == 5321
+
+f2 = \\x, y, z="hai" -> z + " " + y + " from " + x
+
+assert f2("me", "you") == "hai you from me"
+assert f2("me", "you", "hello") == "hello you from me"
+
+f3 = \\x, y -> f2(x, y, "hello")
+
+assert f3("me", "you") == "hello you from me"
