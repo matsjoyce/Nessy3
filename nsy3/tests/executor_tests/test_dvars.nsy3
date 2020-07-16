@@ -11,9 +11,17 @@ if $Y:
 else:
     $X -= 1
 
+$L = 0
+l = 0
+while l < 10:
+    l += 1
+    $L += 1
+
+
 if test_thunk("Final"):
-    print("Assertions: 3")
+    print("Assertions: 4")
 
     assert $x == 2
     assert $b == 4
     assert $X == 2
+    assert $L == 10

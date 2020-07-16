@@ -58,7 +58,7 @@ class Binop(Expr):
     right: Expr
 
     def pprint(self):
-        return indent([(0, self.op), (0, "(")] + self.left.pprint() + [(0, ",")] + self.right.pprint() + [(0, ")")])
+        return indent([(0, "BO" + self.op), (0, "(")] + self.left.pprint() + [(0, ",")] + self.right.pprint() + [(0, ")")])
 
 
 @dataclasses.dataclass(repr=False)

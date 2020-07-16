@@ -92,6 +92,9 @@ void ExecutionEngine::finish() {
 
 DollarName ExecutionEngine::pick_next_dollar_name() {
     for (auto item : state.set_thunks) {
+        if (item.second->flags & ~static_cast<unsigned int>(DollarSetFlags::DEFAULT)) {
+            continue;
+        }
         auto before = ordering.equal_range(item.first);
         bool ok = true;
         for (auto iter = before.first; iter != before.second; ++iter) {
@@ -110,27 +113,66 @@ DollarName ExecutionEngine::pick_next_dollar_name() {
 void ExecutionEngine::resolve_dollar(DollarName name) {
     state.resolution_order.push_back(name);
     ObjectRef value;
-    auto set_iter = state.set_thunks.find(name);
-    while (set_iter != state.set_thunks.end()) {
-        std::cerr << "$Exec " << set_iter->second->to_str() << std::endl;
-        value = set_iter->second->value;
-        set_iter->second->finalize(create<Integer>(1));
-        state.set_thunks.erase(set_iter);
 
-        auto get_iters = state.get_thunks.equal_range(name);
-        for (auto iter = get_iters.first; iter != get_iters.second;) {
-            std::cerr << "$Final " << iter->second->to_str() << std::endl;
-            if (iter->second->flags & static_cast<unsigned int>(DollarGetFlags::PARTIAL)) {
-                iter->second->finalize(value);
-                state.get_thunks.erase(iter++);
+    {
+        auto iters = state.set_thunks.equal_range(name);
+        bool has_nondefault_set = false;
+        for (auto iter = iters.first; iter != iters.second;) {
+            if (!iter->second->flags) {
+                if (has_nondefault_set) {
+                    throw std::runtime_error("Multiple non-default initial sets");
+                }
+                std::cerr << "$Exec " << iter->second->to_str() << std::endl;
+                value = iter->second->value;
+                iter->second->finalize(create<Integer>(1));
+                state.set_thunks.erase(iter++);
+            }
+            else if (iter->second->flags & static_cast<unsigned int>(DollarSetFlags::DEFAULT)) {
+                std::cerr << "$Exec " << iter->second->to_str() << std::endl;
+                if (!has_nondefault_set) {
+                    value = iter->second->value;
+                }
+                iter->second->finalize(create<Integer>(1));
+                state.set_thunks.erase(iter++);
             }
             else {
                 ++iter;
             }
         }
-        notify_thunks();
-        set_iter = state.set_thunks.find(name);
     }
+
+    {
+        while (true) {
+            notify_thunks();
+            auto set_iter = state.set_thunks.find(name);
+            if (set_iter != state.set_thunks.end()) {
+                if (!(set_iter->second->flags & static_cast<unsigned int>(DollarSetFlags::MODIFICATION))) {
+                    throw std::runtime_error("Non-modification after initial set");
+                }
+                std::cerr << "$Exec " << set_iter->second->to_str() << std::endl;
+                value = set_iter->second->value;
+                set_iter->second->finalize(create<Integer>(1));
+                state.set_thunks.erase(set_iter);
+                continue;
+            }
+            bool found_get = false;
+            auto get_iters = state.get_thunks.equal_range(name);
+            for (auto iter = get_iters.first; iter != get_iters.second; ++iter) {
+                std::cerr << "$Final " << iter->second->to_str() << std::endl;
+                if (iter->second->flags & static_cast<unsigned int>(DollarGetFlags::PARTIAL)) {
+                    iter->second->finalize(value);
+                    state.get_thunks.erase(iter);
+                    found_get = true;
+                    break;
+                }
+            }
+            if (found_get) {
+                continue;
+            }
+            break;
+        }
+    }
+    notify_thunks();
     state.dollar_values[name] = value;
     auto get_iters = state.get_thunks.equal_range(name);
     for (auto iter = get_iters.first; iter != get_iters.second; ++iter) {

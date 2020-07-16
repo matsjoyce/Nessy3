@@ -6,7 +6,9 @@ from . import compile, parser, serialisation
 
 EXECUTOR = pathlib.Path(__file__).parent / "executor/build/executor"
 
-def compile_file(fname, search_paths):
+def compile_file(fname, search_paths=None):
+    if search_paths is None:
+        search_paths = [fname.parent]
     comp_fname = fname.with_suffix(".nsy3c")
 
     with fname.open() as f:

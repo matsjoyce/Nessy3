@@ -128,6 +128,7 @@ class NSY2Lexer(Lexer):
     def tokenize(self, *args, **kwargs):
         indent_stack = [0]
         ends_with_newline = False
+        first_token = True
         for token in super().tokenize(*args, **kwargs):
             ends_with_newline = False
             if token.type == "WHITESPACE":
@@ -136,13 +137,13 @@ class NSY2Lexer(Lexer):
                 before, indentation = token.value.rsplit("\n", 1)
                 ends_with_newline = True
 
-                t = sly.lex.Token()
-                t.value = "\n"
-                t.type = "NEWLINE"
-                t.lineno = token.lineno + before.count("\n")
-                t.index = token.index + len(before)
-                yield t
-
+                if not first_token:
+                    t = sly.lex.Token()
+                    t.value = "\n"
+                    t.type = "NEWLINE"
+                    t.lineno = token.lineno + before.count("\n")
+                    t.index = token.index + len(before)
+                    yield t
 
                 if self.index >= len(self.text):
                     continue
@@ -168,6 +169,9 @@ class NSY2Lexer(Lexer):
                     raise RuntimeError()
             else:
                 yield token
+
+            first_token = False
+
         if indent_stack[-1] > 0:
             ends_with_newline = False
             while indent_stack[-1] > 0:
@@ -204,10 +208,10 @@ class NSY2Parser(Parser):
         ("left", STAR, SLASH, SLASHSLASH, PERCENT),
         ("right", UMINUS),
         ("right", STARSTAR),
-        ("left", LBRAK, DOT)
+        ("left", LBRAK, DOT, LPAREN)
     )
 
-    @_("NEWLINE")
+    @_("")
     def initial(self, p):
         return ast.Block(p, [])
 
@@ -291,7 +295,7 @@ class NSY2Parser(Parser):
     def block(self, p):
         return ast.Block(p, p.stmts)
 
-    @_("LAMBDA defargs ARROW expr")
+    @_("LAMBDA defargs ARROW expr %prec ARROW")
     def expr(self, p):
         return ast.Func(p, p.defargs, ast.Return(p, p.expr))
 
@@ -359,7 +363,7 @@ class NSY2Parser(Parser):
     def expr(self, p):
         return ast.Name(p, p.NAME)
 
-    @_("expr LPAREN args RPAREN")
+    @_("expr LPAREN args RPAREN %prec LPAREN")
     def expr(self, p):
         return ast.Call(p, p.expr, p.args)
 
@@ -430,7 +434,7 @@ class NSY2Parser(Parser):
         "NAME STARSTAREQ expr",
     )
     def simple_stmt(self, p):
-        return ast.AssignStmt(p, p[0], ast.Call(p, ast.Name(p, p[1][:-1]), [ast.Name(p, p[0]), p.expr]))
+        return ast.AssignStmt(p, p[0], ast.Binop(p, p[1][:-1], ast.Name(p, p[0]), p.expr))
 
     @_(
         # Arith
@@ -443,7 +447,7 @@ class NSY2Parser(Parser):
     )
     def simple_stmt(self, p):
         old_value = ast.DollarName(p, p.multipartname, ["partial"])
-        return ast.DollarSetStmt( p, p.multipartname, ast.Binop(p, p[2][:-1], old_value, p.expr), [])
+        return ast.DollarSetStmt(p, p.multipartname, ast.Binop(p, p[2][:-1], old_value, p.expr), ["modification"])
 
     @_("DOLLER multipartname dflags EQ expr")
     def simple_stmt(self, p):

@@ -12,7 +12,7 @@ static const char USAGE[] =
 R"(fs
 
     Usage:
-        executor runspec <rsfile>
+        executor runspec <rsfile> [--nocatch]
         executor run <files>...
 
     Options:
@@ -41,27 +41,34 @@ int main(int argc, const char** argv) {
 //         runspec[create<String>("files"] = files;
     }
     auto execengine = ExecutionEngine();
-//     try {
+
+    if (args["--nocatch"].asBool()) {
         execengine.exec_runspec(runspec);
         execengine.finish();
-//     }
-//     catch (const ObjectRef& exc) {
-//         if (auto cast_exc = std::dynamic_pointer_cast<const Exception>(exc)) {
-//             std::cerr << cast_exc->to_str() << std::endl;
-//         }
-//         else {
-//             std::cerr << "NOT AN EXC!!! " << exc << std::endl;
-//         }
-//         return 1;
-//     }
-//     catch (const std::exception& e) {
-//         std::cerr << e.what() << std::endl;
-//         return 1;
-//     }
-//     catch (...) {
-//         std::cerr << "Unknown exception" << std::endl;
-//         return 1;
-//     }
+    }
+    else {
+        try {
+            execengine.exec_runspec(runspec);
+            execengine.finish();
+        }
+        catch (const ObjectRef& exc) {
+            if (auto cast_exc = std::dynamic_pointer_cast<const Exception>(exc)) {
+                std::cerr << cast_exc->to_str() << std::endl;
+            }
+            else {
+                std::cerr << "NOT AN EXC!!! " << exc << std::endl;
+            }
+            return 1;
+        }
+        catch (const std::exception& e) {
+            std::cerr << e.what() << std::endl;
+            return 1;
+        }
+        catch (...) {
+            std::cerr << "Unknown exception" << std::endl;
+            return 1;
+        }
+    }
 
     return 0;
 }
