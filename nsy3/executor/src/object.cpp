@@ -112,8 +112,8 @@ std::pair<TypeRef, TypeRef> make_top_types() {
     auto unsupported_op = [](std::string op) {
         return create<BuiltinFunction>([op](ObjectRef a, ObjectRef b) -> ObjectRef {
             create<UnsupportedOperation>(
-                "Objects of types '" + b->obj_type()->name()
-                + "' and '" + a->obj_type()->name() + "' do not support the operator '" + op + "'"
+                "Objects of types '" + a->obj_type()->name()
+                + "' and '" + b->obj_type()->name() + "' do not support the operator '" + op + "'"
             )->raise();
             return {};
         });
@@ -177,6 +177,7 @@ std::pair<TypeRef, TypeRef> make_top_types() {
         {"r%", unsupported_op("r%")},
         {"**", unsupported_op("**")},
         {"r**", unsupported_op("r**")},
+        {"[]", unsupported_op("[]")},
         {"__type__", create<Property>(create<BuiltinFunction>(method(&Object::obj_type)))}
     };
 
@@ -448,17 +449,27 @@ bool Float::to_bool() const {
 }
 
 TypeRef String::type = create<Type>("String", Type::basevec{Object::type}, Type::attrmap{
-    {"+", create<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
-    {"*", create<BuiltinFunction>([](std::string a, int b) {
-        std::string res(a.size() * std::max(0, b), '\0');
-        for (auto i = 0; i < b; ++i) {
-            res.replace(i * a.size(), a.size(), a);
+    {"+", create<BuiltinFunction>([](const String* self, ObjectRef other) -> ObjectRef {
+        if (auto other_s = dynamic_cast<const String*>(other.get())) {
+            return create<String>(self->value + other_s->value);
         }
-        return res;
+        return self->getsuper(String::type, "+")->call({other});
     })},
-    {"==", create<BuiltinFunction>([](std::string a, ObjectRef b) {
-        if (auto obj = dynamic_cast<const String*>(b.get())) return a == obj->get();
-        return false;
+    {"*", create<BuiltinFunction>([](const String* self, ObjectRef other) -> ObjectRef {
+        if (auto other_i = dynamic_cast<const Integer*>(other.get())) {
+            std::string res(self->value.size() * std::max(0l, other_i->get()), '\0');
+            for (auto i = other_i->get(); i > 0;) {
+                res.replace(--i * self->value.size(), self->value.size(), self->value);
+            }
+            return create<String>(res);
+        }
+        return self->getsuper(String::type, "*")->call({other});
+    })},
+    {"==", create<BuiltinFunction>([](const String* self, ObjectRef other) -> ObjectRef {
+        if (auto other_s = dynamic_cast<const String*>(other.get())) {
+            return create<Boolean>(self->get() == other_s->get());
+        }
+        return self->getsuper(String::type, "==")->call({other});
     })},
 });
 
@@ -468,16 +479,6 @@ String::String(TypeRef type, std::string v) : Object(type), value(v) {
 std::string String::to_str() const {
     return value;
 }
-TypeRef Bytes::type = create<Type>("Bytes", Type::basevec{Object::type}, Type::attrmap{
-    {"+", create<BuiltinFunction>([](std::string a, std::string b) { return a + b; })},
-    {"*", create<BuiltinFunction>([](std::string a, int b) {
-        std::string res(a.size() * std::max(0, b), '\0');
-        for (auto i = 0; i < b; ++i) {
-            res.replace(i * a.size(), a.size(), a);
-        }
-        return res;
-    })}
-});
 
 std::size_t String::hash() const {
     return std::hash<std::string>{}(value);
@@ -489,6 +490,31 @@ bool String::eq(ObjectRef other) const {
     }
     return false;
 }
+
+TypeRef Bytes::type = create<Type>("Bytes", Type::basevec{Object::type}, Type::attrmap{
+    {"+", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> ObjectRef {
+        if (auto other_s = dynamic_cast<const Bytes*>(other.get())) {
+            return create<Bytes>(self->value + other_s->value);
+        }
+        return self->getsuper(Bytes::type, "+")->call({other});
+    })},
+    {"*", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> ObjectRef {
+        if (auto other_i = dynamic_cast<const Integer*>(other.get())) {
+            std::basic_string<unsigned char> res(self->value.size() * std::max(0l, other_i->get()), '\0');
+            for (auto i = other_i->get(); i;) {
+                res.replace(--i * self->value.size(), self->value.size(), self->value);
+            }
+            return create<Bytes>(res);
+        }
+        return self->getsuper(Bytes::type, "*")->call({other});
+    })},
+    {"==", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> ObjectRef {
+        if (auto other_s = dynamic_cast<const Bytes*>(other.get())) {
+            return create<Boolean>(self->get() == other_s->get());
+        }
+        return self->getsuper(Bytes::type, "==")->call({other});
+    })},
+});
 
 Bytes::Bytes(TypeRef type, std::basic_string<unsigned char> v) : Object(type), value(v) {
 }
@@ -525,7 +551,15 @@ ObjectRef Property::call(const std::vector<ObjectRef>& args) const {
     return func->call(args);
 }
 
-TypeRef Dict::type = create<Type>("Dict", Type::basevec{Object::type});
+TypeRef Dict::type = create<Type>("Dict", Type::basevec{Object::type}, Type::attrmap{
+    {"[]", create<BuiltinFunction>([](const Dict* self, ObjectRef key) {
+        auto iter = self->value.find(key);
+        if (iter == self->value.end()) {
+            create<IndexException>("No such key")->raise();
+        }
+        return iter->second;
+    })}
+});
 
 Dict::Dict(TypeRef type, ObjectRefMap v) : Object(type), value(v) {
 }
@@ -545,7 +579,14 @@ std::string Dict::to_str() const {
     return ss.str();
 }
 
-TypeRef List::type = create<Type>("List", Type::basevec{Object::type});
+TypeRef List::type = create<Type>("List", Type::basevec{Object::type}, Type::attrmap{
+    {"[]", create<BuiltinFunction>([](const List* self, const Integer* idx) {
+        if (idx->get() < 0 || idx->get() >= static_cast<int64_t>(self->value.size())) {
+            create<IndexException>("Index is out of bounds")->raise();
+        }
+        return self->value[idx->get()];
+    })}
+});
 
 List::List(TypeRef type, std::vector<ObjectRef> v) : Object(type), value(v) {
 }

@@ -16,6 +16,8 @@ class ASTNode:
             self.lineno = self.tok.lineno
         except AttributeError:
             self.lineno = None
+        # Make sure comparisons aren't scuppered by the stored token
+        self.tok = None
 
     def to_str(self, prefix=""):
         return "\n".join(prefix + "  " * indent + text for indent, text in self.pprint())
@@ -130,6 +132,16 @@ class DollarName(Expr):
 
     def pprint(self):
         return [(0, "$")] + [z for n in self.name for z in n.pprint()] + [(0, " ".join("@" + f for f in self.flags))]
+
+
+@dataclasses.dataclass(repr=False)
+class IfExpr(Expr):
+    left: Expr
+    cond: Expr
+    right: Expr
+
+    def pprint(self):
+        return [(0, "if")] + indent(self.cond.pprint()) + [(0, "then")] + indent(self.left.pprint()) + [(0, "else")] + indent(self.right.pprint())
 
 
 class Stmt(ASTNode):

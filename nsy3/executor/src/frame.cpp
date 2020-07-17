@@ -146,7 +146,15 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 }
                 catch (const ObjectRef& exc) {
                     if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
-                        res = right->gettype("r" + op)->call({left});
+                        try {
+                            res = right->gettype("r" + op)->call({left});
+                        }
+                        catch (const ObjectRef& exc2) {
+                            if (dynamic_cast<const UnsupportedOperation*>(exc2.get())) {
+                                throw exc;
+                            }
+                            throw;
+                        }
                     }
                     else {
                         throw;

@@ -16,6 +16,8 @@ DOLLAR_SET_FLAGS = {
     "default": 2
 }
 
+REFLECTED_BINOPS = ["+", "-", "*", "/", "//", "%", "**", "==", "!=", "<", ">", "<=", ">="]
+
 class Combine:
     def __init__(self, a, b):
         self.a, self.b = a, b
@@ -164,12 +166,10 @@ def compile_expr_iter(a, ctx):
             yield Bytecode.DROP(1)
             yield compile_expr(a.right, ctx)
             yield end_label
-        else:
+        elif a.op in REFLECTED_BINOPS:
             yield Bytecode.BINOP(ctx.const(a.op, wrap=False), compile_expr(a.left, ctx), compile_expr(a.right, ctx))
-        #elif a.op in UNSYMMETRIC_REFLECTED_BINOPS:
-            #yield Bytecode.UNSYMREFBINOP(ctx.const(a.op, wrap=False), compile_expr(a.left, ctx), compile_expr(a.right, ctx))
-        #else:
-            #yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.op)), compile_expr(a.right, ctx))
+        else:
+            yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.op)), compile_expr(a.right, ctx))
     elif isinstance(a, ast.Getattr):
         yield Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.right))
     elif isinstance(a, ast.Monop):
@@ -188,7 +188,15 @@ def compile_expr_iter(a, ctx):
     elif isinstance(a, ast.Literal):
         yield ctx.const(a.value)
     elif isinstance(a, ast.SequenceLiteral):
-        yield Bytecode.CALL(Bytecode.GET(ctx.const(a.type, wrap=False)), *[compile_expr(s, ctx) for s in a.seq])
+        if a.type == "{}" and (not a.seq or isinstance(a.seq[0], tuple)):
+            # Dict
+            raise RuntimeError("{} not imp")
+        elif a.type == "{}":
+            # Set
+            raise RuntimeError("{} not imp")
+        else:
+            # List
+            yield Bytecode.CALL(Bytecode.GET(ctx.const(a.type, wrap=False)), *[compile_expr(s, ctx) for s in a.seq])
     elif isinstance(a, ast.Name):
         yield Bytecode.GET(ctx.const(a.name, wrap=False))
     elif isinstance(a, ast.DollarName):
@@ -207,6 +215,15 @@ def compile_expr_iter(a, ctx):
         defaults_expr = Bytecode.CALL(Bytecode.GET(ctx.const("[]", wrap=False)), *defaults)
         signature = Bytecode.CALL(Bytecode.GET(ctx.const("Signature", wrap=False)), ctx.const(arg_names), defaults_expr, ctx.const(0))
         yield Bytecode.CALL(Bytecode.GET(ctx.const("->", wrap=False)), Bytecode.GET(ctx.const("__code__", wrap=False)), ctx.const(func_label), signature, Bytecode.GETENV())
+    elif isinstance(a, ast.IfExpr):
+        else_label, end_label = ctx.label(), ctx.label()
+        yield compile_expr(a.cond, ctx)
+        yield Bytecode.JUMP_IFNOT(else_label)
+        yield compile_expr(a.left, ctx)
+        yield Bytecode.JUMP(end_label)
+        yield else_label
+        yield compile_expr(a.right, ctx)
+        yield end_label
     else:
         raise RuntimeError(f"Cannot compile {type(a)} to IR.")
 

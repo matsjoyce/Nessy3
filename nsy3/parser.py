@@ -135,7 +135,6 @@ class NSY2Lexer(Lexer):
                 if "\n" not in token.value:
                     continue
                 before, indentation = token.value.rsplit("\n", 1)
-                ends_with_newline = True
 
                 if not first_token:
                     t = sly.lex.Token()
@@ -144,6 +143,8 @@ class NSY2Lexer(Lexer):
                     t.lineno = token.lineno + before.count("\n")
                     t.index = token.index + len(before)
                     yield t
+
+                    ends_with_newline = True
 
                 if self.index >= len(self.text):
                     continue
@@ -199,7 +200,8 @@ class NSY2Parser(Parser):
 
     precedence = (
         ("nonassoc", LOWPREC),
-        ("right", ARROW),
+        ("left", ARROW, LAMBDA),
+        ("right", IFEXPR, IF, ELSE),
         ("left", OR),
         ("left", AND),
         ("right", NOT),
@@ -211,7 +213,7 @@ class NSY2Parser(Parser):
         ("left", LBRAK, DOT, LPAREN)
     )
 
-    @_("")
+    @_("NEWLINE")
     def initial(self, p):
         return ast.Block(p, [])
 
@@ -354,6 +356,10 @@ class NSY2Parser(Parser):
     @_("modname DOT NAME")
     def modname(self, p):
         return p.modname + [p.NAME]
+
+    @_("expr IF expr ELSE expr %prec IFEXPR")
+    def expr(self, p):
+        return ast.IfExpr(p, p.expr0, p.expr1, p.expr2)
 
     @_("LPAREN expr RPAREN")
     def expr(self, p):

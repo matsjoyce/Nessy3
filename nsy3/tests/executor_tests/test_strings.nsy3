@@ -1,0 +1,4 @@
+print("Assertions: 2")
+
+assert "hello" + " bob" == "hello bob"
+assert "hai" * 3 == "haihaihai"
