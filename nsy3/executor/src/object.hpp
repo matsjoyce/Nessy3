@@ -25,6 +25,9 @@ public:
     virtual std::size_t hash() const;
     virtual bool eq(ObjectRef other) const;
     TypeRef obj_type() const;
+    // TODO: The below doesn't seem quite right. Intuitivly, getattr is a function provided by the type. But this works for now.
+    ObjectRef getsuper(TypeRef type, std::string name) const;
+    ObjectRef gettype(std::string name) const;
     virtual ObjectRef getattr(std::string name) const;
     virtual ObjectRef call(const std::vector<ObjectRef>& args) const;
 
@@ -39,8 +42,10 @@ std::ostream& operator<<(std::ostream& s, const ObjectRef& obj);
 
 class Type : public Object {
     std::string name_;
-    std::vector<TypeRef> bases_;
-    std::map<std::string, ObjectRef> attrs;
+    std::vector<TypeRef> bases_, mro_;
+    std::map<std::string, ObjectRef> attrs_;
+
+    static std::vector<TypeRef> make_mro(const std::vector<TypeRef>& bases);
 public:
     Type(TypeRef type, std::string name, std::vector<TypeRef> bases, std::map<std::string, ObjectRef> attr={});
     std::string to_str() const override;
@@ -48,6 +53,8 @@ public:
     ObjectRef getattr(std::string name) const override;
     ObjectRef call(const std::vector<ObjectRef>& args) const override;
     std::string name() const { return name_; }
+    const std::vector<TypeRef>& mro() const { return mro_; }
+    const std::map<std::string, ObjectRef>& attrs() const { return attrs_; }
 
     using attrmap = std::map<std::string, ObjectRef>;
     using basevec = std::vector<TypeRef>;
@@ -104,12 +111,12 @@ public:
 
 class Integer : public Numeric {
 protected:
-    int value;
+    int64_t value;
 public:
-    Integer(TypeRef type, int v);
+    Integer(TypeRef type, int64_t v);
     std::string to_str() const override;
     static TypeRef type;
-    int get() const { return value; }
+    int64_t get() const { return value; }
     double to_double() const override { return value; }
     bool to_bool() const override;
 };

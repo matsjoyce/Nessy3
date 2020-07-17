@@ -62,6 +62,7 @@ void Code::print(std::ostream& stream) const {
             case Ops::KWARG: stream << "KWARG " << arg << "\n"; break;
             case Ops::GETATTR: stream << "GETATTR " << arg << "\n"; break;
             case Ops::CALL: stream << "CALL " << arg << "\n"; break;
+            case Ops::BINOP: stream << "BINOP " << arg << " (" << consts[arg] << ")\n"; break;
             case Ops::GET: stream << "GET " << arg << " (" << consts[arg] << ")\n"; break;
             case Ops::SET: stream << "SET " << arg << " (" << consts[arg] << ")\n"; break;
             case Ops::CONST: stream << "CONST " << arg << " (" << consts[arg] << ")\n"; break;

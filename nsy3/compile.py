@@ -16,7 +16,6 @@ DOLLAR_SET_FLAGS = {
     "default": 2
 }
 
-
 class Combine:
     def __init__(self, a, b):
         self.a, self.b = a, b
@@ -65,9 +64,10 @@ class CompiledCode:
         return self.loop_stack[-1] if self.loop_stack else None
 
     def const(self, const, wrap=True):
-        try:
-            idx = self.consts.index(const)
-        except ValueError:
+        for idx, c in enumerate(self.consts):
+            if c == const and type(c) is type(const):
+                break
+        else:
             self.consts.append(const)
             idx = len(self.consts) - 1
         if not wrap:
@@ -165,14 +165,18 @@ def compile_expr_iter(a, ctx):
             yield compile_expr(a.right, ctx)
             yield end_label
         else:
-            yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.op)), compile_expr(a.right, ctx))
+            yield Bytecode.BINOP(ctx.const(a.op, wrap=False), compile_expr(a.left, ctx), compile_expr(a.right, ctx))
+        #elif a.op in UNSYMMETRIC_REFLECTED_BINOPS:
+            #yield Bytecode.UNSYMREFBINOP(ctx.const(a.op, wrap=False), compile_expr(a.left, ctx), compile_expr(a.right, ctx))
+        #else:
+            #yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.op)), compile_expr(a.right, ctx))
     elif isinstance(a, ast.Getattr):
         yield Bytecode.GETATTR(compile_expr(a.left, ctx), ctx.const(a.right))
     elif isinstance(a, ast.Monop):
         if a.op == "not":
             yield Bytecode.CALL(Bytecode.GET(ctx.const("not", wrap=False)), compile_expr(a.value, ctx))
         else:
-            yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.value, ctx), ctx.const("unary_" + a.op)))
+            yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.value, ctx), ctx.const("u" + a.op)))
     elif isinstance(a, ast.Call):
         args = []
         for arg in a.args:

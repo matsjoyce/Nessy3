@@ -18,6 +18,12 @@ public:
     static TypeRef type;
 };
 
+class UnsupportedOperation : public TypeException {
+public:
+    using TypeException::TypeException;
+    static TypeRef type;
+};
+
 class NameException : public Exception {
 public:
     using Exception::Exception;

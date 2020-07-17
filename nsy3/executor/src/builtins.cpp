@@ -21,6 +21,10 @@ ObjectRef braks(const std::vector<ObjectRef>& args) {
     return create<List>(args);
 }
 
+bool not_(ObjectRef arg) {
+    return !arg->to_bool();
+}
+
 int assert(ObjectRef obj) {
     if (!obj->to_bool()) {
         create<AssertionException>("Assertion failed")->raise();
@@ -35,4 +39,8 @@ std::map<std::string, ObjectRef> builtins = {
     {"Signature", Signature::type},
     {"[]", create<BuiltinFunction>(braks)},
     {"assert", create<BuiltinFunction>(assert)},
+    {"not", create<BuiltinFunction>(not_)},
+    {"Float", Float::type},
+    {"Integer", Integer::type},
+    {"Object", Object::type}
 };

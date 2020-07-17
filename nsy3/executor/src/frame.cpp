@@ -113,6 +113,48 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 position = stack_push(0, func->call(args), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
                 break;
             }
+//             case Ops::SYMREFBINOP: {
+//                 auto left = stack.back().second;
+//                 stack.pop_back();
+//                 auto right = stack.back().second;
+//                 stack.pop_back();
+//                 auto op = convert<std::string>(consts[arg]);
+//                 ObjectRef res;
+//                 try {
+//                     res = left->getattr(op)->call({right});
+//                 }
+//                 catch (const ObjectRef& exc) {
+//                     if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
+//                         res = right->getattr(op)->call({left});
+//                     }
+//                     else {
+//                         throw;
+//                     }
+//                 }
+//                 position = stack_push(0, res, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+//                 break;
+//             }
+            case Ops::BINOP: {
+                auto right = stack.back().second;
+                stack.pop_back();
+                auto left = stack.back().second;
+                stack.pop_back();
+                auto op = convert<std::string>(consts[arg]);
+                ObjectRef res;
+                try {
+                    res = left->gettype(op)->call({right});
+                }
+                catch (const ObjectRef& exc) {
+                    if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
+                        res = right->gettype("r" + op)->call({left});
+                    }
+                    else {
+                        throw;
+                    }
+                }
+                position = stack_push(0, res, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+                break;
+            }
             case Ops::GET: {
                 auto name = dynamic_cast<const String*>(consts[arg].get());
                 if (!name) {

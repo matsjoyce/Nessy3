@@ -14,5 +14,6 @@ void Exception::raise() const {
 }
 
 TypeRef TypeException::type = create<Type>("TypeException", Type::basevec{Exception::type});
+TypeRef UnsupportedOperation::type = create<Type>("UnsupportedOperation", Type::basevec{TypeException::type});
 TypeRef NameException::type = create<Type>("NameException", Type::basevec{Exception::type});
 TypeRef AssertionException::type = create<Type>("AssertionException", Type::basevec{Exception::type});

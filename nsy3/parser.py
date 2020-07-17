@@ -53,10 +53,10 @@ class NSY2Lexer(Lexer):
     PLUS = r"\+"
     MINUSEQ = r"-="
     MINUS = r"-"
-    STAREQ = r"\*="
-    STAR = r"\*"
     STARSTAREQ = r"\*\*="
     STARSTAR = r"\*\*"
+    STAREQ = r"\*="
+    STAR = r"\*"
     SLASHSLASHEQ = r"//="
     SLASHSLASH = r"//"
     SLASHEQ = r"/="
@@ -97,7 +97,7 @@ class NSY2Lexer(Lexer):
     NAME["from"] = FROM
     NAME["as"] = AS
 
-    @_(r"[0-9]+(\.[0-9])?")
+    @_(r"[0-9]+(\.[0-9]+)?")
     def NUMBER(self, t):
         if "." in t.value:
             t.value = float(t.value)

@@ -105,6 +105,11 @@ class Bytecode(metaclass=BCodeMeta):
     KWARG = BCodeType("name", ("value"))
     GETATTR = BCodeType(subs=("obj", "name"))
     CALL = BCodeType(subs=("func", "args"), auto_arg=lambda s: len(s) - 1)
+    # Symmetric reflected binary operator
+    #SYMREFBINOP = BCodeType("op", subs=("left", "right"))
+    # Unsymmetric reflected binary operator
+    #UNSYMREFBINOP = BCodeType("op", subs=("left", "right"))
+    BINOP = BCodeType("op", subs=("left", "right"))
     GET = BCodeType("name")
     SET = BCodeType("name", ("value"))
     CONST = BCodeType("value")

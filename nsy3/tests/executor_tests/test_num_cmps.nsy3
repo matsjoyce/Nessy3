@@ -1,0 +1,29 @@
+print("Assertions: 75")
+
+def check(low, middle, high):
+    assert low < middle
+    assert not (middle < middle)
+    assert not (high < middle)
+
+    assert middle > low
+    assert not (middle > middle)
+    assert not (middle > high)
+
+    assert low <= middle
+    assert middle <= middle
+    assert not (high <= middle)
+
+    assert middle >= low
+    assert middle >= middle
+    assert not (middle > high)
+
+    assert middle == middle
+    assert middle != low
+    assert middle != high
+
+
+check(1, 2, 3)
+check(1.1, 2.3, 4.5)
+check(1, 2.3, 4.5)
+check(1.1, 2, 4.5)
+check(1.1, 2.3, 4)

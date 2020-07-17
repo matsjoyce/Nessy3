@@ -11,6 +11,7 @@ enum class Ops : unsigned char {
     KWARG,
     GETATTR,
     CALL,
+    BINOP,
     GET,
     SET,
     CONST,
