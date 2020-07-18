@@ -42,26 +42,26 @@ ObjectRef ExecutionEngine::import_(std::string name) {
 }
 
 
-ObjectRef ExecutionEngine::test_thunk(std::string name) {
-    auto tt = create<TestThunk>(this, name);
+BaseObjectRef ExecutionEngine::test_thunk(std::string name) {
+    auto tt = std::make_shared<TestThunk>(this, name);
     state.test_thunks.push_back(tt);
     return tt;
 }
 
-ObjectRef ExecutionEngine::dollar_get(DollarName name, unsigned int flags) {
+BaseObjectRef ExecutionEngine::dollar_get(DollarName name, unsigned int flags) {
     auto iter = state.dollar_values.find(name);
     if (iter != state.dollar_values.end()) {
         return iter->second;
     }
     std::cerr << "Making get for " << name << std::endl;
-    auto thunk = create<GetThunk>(this, name, flags);
+    auto thunk = std::make_shared<GetThunk>(this, name, flags);
     state.get_thunks.insert({name, thunk});
     return thunk;
 }
 
-ObjectRef ExecutionEngine::dollar_set(DollarName name, ObjectRef value, unsigned int flags) {
+BaseObjectRef ExecutionEngine::dollar_set(DollarName name, ObjectRef value, unsigned int flags) {
     std::cerr << "Making set for " << name << std::endl;
-    auto thunk = create<SetThunk>(this, name, value, flags);
+    auto thunk = std::make_shared<SetThunk>(this, name, value, flags);
     state.set_thunks.insert({name, thunk});
     return thunk;
 }
@@ -215,9 +215,13 @@ void ExecutionEngine::check_consistency() {
 void ExecutionEngine::exec_file(std::string fname) {
     auto c = Code::from_file(fname);
     c->print(std::cerr);
-    auto start_env = builtins;
-    auto additions = env_additions;
-    start_env.merge(additions);
+    std::map<std::string, BaseObjectRef> start_env;
+    for (auto& item : builtins) {
+        start_env[item.first] = item.second;
+    }
+    for (auto& item : env_additions) {
+        start_env[item.first] = item.second;
+    }
     std::cerr << "Executing " << fname << std::endl;
     auto frame = create<Frame>(c, 0, start_env);
     auto end_env = frame->execute();
@@ -243,19 +247,19 @@ void ExecutionEngine::subscribe_thunk(std::shared_ptr<const Thunk> source, std::
     state.thunk_subscriptions.insert({source, dest});
 }
 
-void ExecutionEngine::finalize_thunk(std::shared_ptr<const Thunk> source, ObjectRef result) {
+void ExecutionEngine::finalize_thunk(std::shared_ptr<const Thunk> source, BaseObjectRef result) {
     state.thunk_results.push_back({source, result});
 }
 
-TestThunk::TestThunk(TypeRef type, ExecutionEngine* execengine, std::string name) : Thunk(type, execengine), name(name) {
+TestThunk::TestThunk(ExecutionEngine* execengine, std::string name) : Thunk(execengine), name(name) {
 }
 
 std::string TestThunk::to_str() const {
     return "TT(" + name + ")";
 }
 
-GetThunk::GetThunk(TypeRef type, ExecutionEngine* execengine, DollarName name, unsigned int flags)
-    : Thunk(type, execengine), name(name), flags(flags) {
+GetThunk::GetThunk(ExecutionEngine* execengine, DollarName name, unsigned int flags)
+    : Thunk(execengine), name(name), flags(flags) {
 }
 
 std::string GetThunk::to_str() const {
@@ -264,8 +268,8 @@ std::string GetThunk::to_str() const {
     return ss.str();
 }
 
-SetThunk::SetThunk(TypeRef type, ExecutionEngine* execengine, DollarName name, ObjectRef value, unsigned int flags)
-    : Thunk(type, execengine), name(name), value(value), flags(flags) {
+SetThunk::SetThunk(ExecutionEngine* execengine, DollarName name, ObjectRef value, unsigned int flags)
+    : Thunk(execengine), name(name), value(value), flags(flags) {
 }
 
 std::string SetThunk::to_str() const {

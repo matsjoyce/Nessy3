@@ -59,14 +59,13 @@ template<class K, class V> struct convert_from_objref<std::map<K, V>> {
     }
 };
 
-template<> struct convert_to_objref<int> { static ObjectRef convert(const int& objref); };
-template<> struct convert_to_objref<bool> { static ObjectRef convert(const bool& objref); };
-template<> struct convert_to_objref<double> { static ObjectRef convert(const double& objref); };
-template<> struct convert_to_objref<std::string> { static ObjectRef convert(const std::string& objref); };
-template<> struct convert_to_objref<ObjectRef> { static ObjectRef convert(const ObjectRef& objref); };
-template<> struct convert_to_objref<void> { static ObjectRef convert(); };
+template<> struct convert_to_objref<int> { static BaseObjectRef convert(const int& objref); };
+template<> struct convert_to_objref<bool> { static BaseObjectRef convert(const bool& objref); };
+template<> struct convert_to_objref<double> { static BaseObjectRef convert(const double& objref); };
+template<> struct convert_to_objref<std::string> { static BaseObjectRef convert(const std::string& objref); };
+template<> struct convert_to_objref<void> { static BaseObjectRef convert(); };
 template<class T> struct convert_to_objref<std::shared_ptr<const T>> {
-    static ObjectRef convert(const std::shared_ptr<const T>& objref) {
+    static BaseObjectRef convert(const std::shared_ptr<const T>& objref) {
         return objref;
     }
 };

@@ -13,22 +13,14 @@ int Frame::execution_debug_level = 0;
 TypeRef Frame::type = create<Type>("Frame", Type::basevec{Object::type});
 
 Frame::Frame(TypeRef type, std::shared_ptr<const Code> code, unsigned int offset,
-             std::map<std::string, ObjectRef> env, unsigned int limit, std::vector<std::pair<unsigned char, ObjectRef>> stack)
+             std::map<std::string, BaseObjectRef> env, unsigned int limit, std::vector<std::pair<unsigned char, ObjectRef>> stack)
     : Object(type), code_(code), position_(offset), limit_(limit), env_(env), stack_(stack) {
     this->env_["__code__"] = code;
 }
 
-ObjectRef Frame::get_env(std::string name) const {
-    auto iter = env_.find(name);
-    if (iter == env_.end()) {
-        create<NameException>("Name '" + name + "' is not defined")->raise();
-    }
-    return iter->second;
-}
-
-inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const Frame& frame, const std::basic_string<unsigned char>& code,
+inline unsigned int stack_push(unsigned char flags, const BaseObjectRef& item, const Frame& frame, const std::basic_string<unsigned char>& code,
                        const std::vector<ObjectRef>& consts, std::vector<std::pair<unsigned char, ObjectRef>>& stack,
-                       unsigned int& position, std::map<std::string, ObjectRef>& env, unsigned int skip_position, unsigned int skip_save_stack
+                       unsigned int& position, std::map<std::string, BaseObjectRef>& env, unsigned int skip_position, unsigned int skip_save_stack
                        ) {
     if (auto thunk = dynamic_cast<const Thunk*>(item.get())) {
         if (skip_position != 0xFFFF) {
@@ -41,7 +33,7 @@ inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const
             stack.erase(stack.begin() + skip_save_stack, stack.end());
             auto subframe = create<Frame>(frame.code(), position, env, skip_position, sf_stack);
 
-            auto exec_thunk = create<ExecutionThunk>(thunk->execution_engine(), subframe);
+            auto exec_thunk = std::make_shared<ExecutionThunk>(thunk->execution_engine(), subframe);
             thunk->subscribe(exec_thunk);
             // Exploit the fact that skip_pos > pos and that nothing is going to jump out of that range to find all of the sets.
             for (; position < skip_position; position += 5) {
@@ -51,7 +43,7 @@ inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const
                     if (!name) {
                         create<TypeException>("Name must be a string")->raise();
                     }
-                    auto name_thunk = create<NameExtractThunk>(thunk->execution_engine(), name->get());
+                    auto name_thunk = std::make_shared<NameExtractThunk>(thunk->execution_engine(), name->get());
                     exec_thunk->subscribe(name_thunk);
                     env[name->get()] = name_thunk;
                 }
@@ -61,8 +53,8 @@ inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const
         else {
             std::cerr << "Skip from " << position << " to return" << std::endl;
             auto subframe = create<Frame>(frame.code(), position, env, skip_position, stack);
-            auto exec_thunk = create<ExecutionThunk>(thunk->execution_engine(), subframe);
-            auto name_thunk = create<NameExtractThunk>(thunk->execution_engine(), "return");
+            auto exec_thunk = std::make_shared<ExecutionThunk>(thunk->execution_engine(), subframe);
+            auto name_thunk = std::make_shared<NameExtractThunk>(thunk->execution_engine(), "return");
             exec_thunk->subscribe(name_thunk);
             thunk->subscribe(exec_thunk);
             env["return"] = name_thunk;
@@ -70,13 +62,13 @@ inline unsigned int stack_push(unsigned char flags, const ObjectRef& item, const
         }
     }
     else {
-        stack.emplace_back(std::make_pair(flags, item));
+        stack.emplace_back(std::make_pair(flags, std::dynamic_pointer_cast<const Object>(item)));
     }
     return position;
 }
 
 
-std::map<std::string, ObjectRef> Frame::execute() const {
+std::map<std::string, BaseObjectRef> Frame::execute() const {
     const auto& code = code_->code;
     const auto& consts = code_->consts;
     auto stack = stack_;
@@ -129,7 +121,7 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 auto left = stack.back().second;
                 stack.pop_back();
                 auto op = convert<std::string>(consts[arg]);
-                ObjectRef res;
+                BaseObjectRef res;
                 try {
                     res = left->gettype(op)->call({right});
                 }
@@ -224,11 +216,7 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 return env;
             }
             case Ops::GETENV: {
-                ObjectRefMap env_copy;
-                for (auto item : env) {
-                    env_copy[create<String>(item.first)] = item.second;
-                }
-                stack.emplace_back(std::make_pair(0, create<Dict>(env_copy)));
+                stack.emplace_back(std::make_pair(0, create<Env>(env)));
                 break;
             }
             case Ops::SETSKIP: {
@@ -306,22 +294,40 @@ std::map<std::string, ObjectRef> Frame::execute() const {
     return env;
 }
 
-ExecutionThunk::ExecutionThunk(TypeRef type, ExecutionEngine* execengine, std::shared_ptr<const Frame> frame) : Thunk(type, execengine), frame(frame) {
+TypeRef Module::type = create<Type>("Module", Type::basevec{Object::type});
+
+Module::Module(TypeRef type, std::string name, std::map<std::string, BaseObjectRef> v) : Object(type), name(name), value(v) {
 }
 
-void ExecutionThunk::notify(ObjectRef obj) const {
+std::string Module::to_str() const {
+    return "Module(" + name + ")";
+}
+
+BaseObjectRef Module::getattr(std::string name) const {
+    auto iter = value.find(name);
+    if (iter == value.end()) {
+        return Object::getattr(name);
+    }
+    return iter->second;
+}
+
+TypeRef Env::type = create<Type>("Env", Type::basevec{Object::type});
+
+Env::Env(TypeRef type, std::map<std::string, BaseObjectRef> v) : Object(type), value(v) {
+}
+
+ExecutionThunk::ExecutionThunk(ExecutionEngine* execengine, std::shared_ptr<const Frame> frame) : Thunk(execengine), frame(frame) {
+}
+
+void ExecutionThunk::notify(BaseObjectRef obj) const {
     if (auto thunk = dynamic_cast<const Thunk*>(obj.get())) {
         thunk->subscribe(std::dynamic_pointer_cast<const Thunk>(shared_from_this()));
         return;
     }
     auto new_stack = frame->stack_;
-    new_stack.push_back(std::make_pair(0, obj));
+    new_stack.push_back(std::make_pair(0, std::dynamic_pointer_cast<const Object>(obj)));
     auto new_frame = create<Frame>(frame->code_, frame->position_, frame->env_, frame->limit_, std::move(new_stack));
-    ObjectRefMap objenv;
-    for (auto item : new_frame->execute()) {
-        objenv[create<String>(item.first)] = item.second;
-    }
-    finalize(create<Dict>(objenv));
+    finalize(create<Env>(new_frame->execute()));
 }
 
 std::string ExecutionThunk::to_str() const {
@@ -331,12 +337,12 @@ std::string ExecutionThunk::to_str() const {
 }
 
 
-NameExtractThunk::NameExtractThunk(TypeRef type, ExecutionEngine* execengine, std::string name) : Thunk(type, execengine), name(name) {
+NameExtractThunk::NameExtractThunk(ExecutionEngine* execengine, std::string name) : Thunk(execengine), name(name) {
 }
 
-void NameExtractThunk::notify(ObjectRef obj) const {
-    auto env = std::dynamic_pointer_cast<const Dict>(obj);
-    finalize(env->get().at(create<String>(name)));
+void NameExtractThunk::notify(BaseObjectRef obj) const {
+    auto env = std::dynamic_pointer_cast<const Env>(obj);
+    finalize(env->get().at(name));
 }
 
 std::string NameExtractThunk::to_str() const {

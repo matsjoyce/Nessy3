@@ -73,10 +73,10 @@ class Function : public Object {
     std::shared_ptr<const Code> code;
     int offset;
     std::shared_ptr<const Signature> signature_;
-    std::map<std::string, ObjectRef> env;
+    std::map<std::string, BaseObjectRef> env;
 public:
-    Function(TypeRef type, std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::map<std::string, ObjectRef> env);
-    ObjectRef call(const std::vector<ObjectRef>& args) const override;
+    Function(TypeRef type, std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::map<std::string, BaseObjectRef> env);
+    BaseObjectRef call(const std::vector<ObjectRef>& args) const override;
     std::string to_str() const override;
     static TypeRef type;
     std::shared_ptr<const Signature> signature() const { return signature_; }

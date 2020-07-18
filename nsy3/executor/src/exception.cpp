@@ -10,7 +10,7 @@ std::string Exception::to_str() const {
 }
 
 void Exception::raise() const {
-    throw shared_from_this();
+    throw self();
 }
 
 TypeRef TypeException::type = create<Type>("TypeException", Type::basevec{Exception::type});

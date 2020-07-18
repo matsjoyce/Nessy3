@@ -137,11 +137,11 @@ TypeRef Function::type = create<Type>("Function", Type::basevec{Object::type}, T
     {"signature", create<Property>(create<BuiltinFunction>(method(&Function::signature)))}
 });
 
-Function::Function(TypeRef type, std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::map<std::string, ObjectRef> env)
+Function::Function(TypeRef type, std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::map<std::string, BaseObjectRef> env)
     : Object(type), code(code), offset(offset), signature_(signature), env(env) {
 }
 
-ObjectRef Function::call(const std::vector<ObjectRef>& args) const {
+BaseObjectRef Function::call(const std::vector<ObjectRef>& args) const {
     auto new_env = env;
     if (args.size() > signature_->names.size() || args.size() < signature_->names.size() - signature_->defaults.size()) {
         throw std::runtime_error("Wrong no. args.");

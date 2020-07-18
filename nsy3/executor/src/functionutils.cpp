@@ -50,26 +50,22 @@ ObjectRef convert_from_objref<ObjectRef>::convert(const ObjectRef& objref) {
     return objref;
 }
 
-ObjectRef convert_to_objref<int>::convert(const int& t) {
+BaseObjectRef convert_to_objref<int>::convert(const int& t) {
     return create<Integer>(t);
 }
 
-ObjectRef convert_to_objref<bool>::convert(const bool& t) {
+BaseObjectRef convert_to_objref<bool>::convert(const bool& t) {
     return t ? Boolean::true_ : Boolean::false_;
 }
 
-ObjectRef convert_to_objref<double>::convert(const double& t) {
+BaseObjectRef convert_to_objref<double>::convert(const double& t) {
     return create<Float>(t);
 }
 
-ObjectRef convert_to_objref<std::string>::convert(const std::string& t) {
+BaseObjectRef convert_to_objref<std::string>::convert(const std::string& t) {
     return create<String>(t);
 }
 
-ObjectRef convert_to_objref<ObjectRef>::convert(const ObjectRef& t) {
-    return t;
-}
-
-ObjectRef convert_to_objref<void>::convert() {
+BaseObjectRef convert_to_objref<void>::convert() {
     return NoneType::none;
 }

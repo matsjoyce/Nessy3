@@ -2,6 +2,7 @@
 #include "functionutils.hpp"
 #include "bytecode.hpp"
 #include "exception.hpp"
+#include "frame.hpp"
 #include <iostream>
 
 int print(const std::vector<ObjectRef>& args) {
@@ -13,8 +14,8 @@ int print(const std::vector<ObjectRef>& args) {
     return 0;
 }
 
-ObjectRef arrow(std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::map<std::string, ObjectRef> env) {
-    return create<Function>(code, offset, signature, env);
+ObjectRef arrow(std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::shared_ptr<const Env> env) {
+    return create<Function>(code, offset, signature, env->get());
 }
 
 ObjectRef braks(const std::vector<ObjectRef>& args) {

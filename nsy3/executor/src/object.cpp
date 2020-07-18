@@ -20,7 +20,18 @@ std::ostream& operator<<(std::ostream& s, const ObjectRef& obj) {
     return s;
 }
 
+ObjectRef no_thunks(const BaseObjectRef& r) {
+    auto obj = std::dynamic_pointer_cast<const Object>(r);
+    if (!r) {
+        throw std::runtime_error("Thunks are not allowed to be returned for this method!");
+    }
+    return obj;
+}
+
 Object::Object(TypeRef type) : type_(type) {
+    if (!type) {
+        std::cerr << "NULL type!" << std::endl;
+    }
 }
 
 std::string Object::to_str() const {
@@ -31,8 +42,12 @@ TypeRef Object::obj_type() const {
     return type_;
 }
 
-ObjectRef Object::getattr(std::string name) const {
-    return gettype(name);
+BaseObjectRef Object::getattr(std::string name) const {
+    auto obj = gettype(name);
+    if (dynamic_cast<const Property*>(obj.get())) {
+        return obj->call({self()});
+    }
+    return obj;
 }
 
 ObjectRef Object::gettype(std::string name) const {
@@ -57,10 +72,7 @@ ObjectRef Object::gettype(std::string name) const {
         create<NameException>("Object of type '" + type_->name() + "' has no attribute '" + name + "'")->raise();
     }
     if (dynamic_cast<const BuiltinFunction*>(obj.get())) {
-        return create<BoundMethod>(shared_from_this(), obj);
-    }
-    if (dynamic_cast<const Property*>(obj.get())) {
-        return obj->call({shared_from_this()});
+        return create<BoundMethod>(self(), obj);
     }
     return obj;
 }
@@ -80,17 +92,19 @@ ObjectRef Object::getsuper(TypeRef type, std::string name) const {
         create<NameException>("Super object of type '" + type_->name() + "' using super of '" + type->name() + "' has no attribute '" + name + "'")->raise();
     }
     if (dynamic_cast<const BuiltinFunction*>(obj.get())) {
-        return create<BoundMethod>(shared_from_this(), obj);
-    }
-    if (dynamic_cast<const Property*>(obj.get())) {
-        return obj->call({shared_from_this()});
+        return create<BoundMethod>(self(), obj);
     }
     return obj;
 }
 
-ObjectRef Object::call(const std::vector<ObjectRef>& /*args*/) const {
+BaseObjectRef Object::call(const std::vector<ObjectRef>& /*args*/) const {
     throw std::runtime_error("Cannot call me");
 }
+
+ObjectRef Object::call_no_thunks(const std::vector<ObjectRef>& args) const {
+    return no_thunks(call(args));
+}
+
 
 std::size_t Object::hash() const {
     create<TypeException>("Type '" + type_->name() + "' is not hashable")->raise();
@@ -99,11 +113,11 @@ std::size_t Object::hash() const {
 
 bool Object::eq(ObjectRef other) const {
     try {
-        return gettype("==")->call({other})->to_bool();
+        return no_thunks(gettype("==")->call({other}))->to_bool();
     }
     catch (const ObjectRef& exc) {
         if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
-            return other->gettype("r==")->call({shared_from_this()})->to_bool();
+            return std::dynamic_pointer_cast<const Object>(other->gettype("r==")->call({self()}))->to_bool();
         }
         throw;
     }
@@ -113,9 +127,14 @@ bool Object::to_bool() const {
     return true;
 }
 
-std::pair<TypeRef, TypeRef> make_top_types() {
+std::vector<TypeRef> make_top_types() {
     auto type_type = std::make_shared<Type>(nullptr, "Type", Type::basevec{});
     type_type->type_ = type_type;
+    Type::type = type_type;
+    auto bf_type = std::make_shared<Type>(type_type, "BuiltinFunction", Type::basevec{});
+    BuiltinFunction::type = bf_type;
+    auto p_type = std::make_shared<Type>(type_type, "Property", Type::basevec{});
+    Property::type = p_type;
 
     auto unsupported_op = [](std::string op) {
         return create<BuiltinFunction>([op](ObjectRef a, ObjectRef b) -> ObjectRef {
@@ -131,7 +150,7 @@ std::pair<TypeRef, TypeRef> make_top_types() {
         {"<=>", unsupported_op("<=>")},
         {"==", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
             try {
-                return convert<int>(a->gettype("<=>")->call({b})) == 0;
+                return convert<int>(a->gettype("<=>")->call_no_thunks({b})) == 0;
             }
             catch (const ObjectRef& exc) {
                 if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
@@ -144,37 +163,47 @@ std::pair<TypeRef, TypeRef> make_top_types() {
             return a->gettype("==")->call({b});
         })},
         {"!=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
-            return !convert<bool>(a->gettype("==")->call({b}));
+            return !convert<bool>(a->gettype("==")->call_no_thunks({b}));
         })},
         {"r!=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
             return a->gettype("!=")->call({b});
         })},
         {"<", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
-            return convert<int>(a->gettype("<=>")->call({b})) == -1;
+            return convert<int>(a->gettype("<=>")->call_no_thunks({b})) == -1;
         })},
         {"r<", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
-            return convert<bool>(a->gettype(">=")->call({b}));
+            return convert<bool>(a->gettype(">=")->call_no_thunks({b}));
         })},
         {">", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
-            return convert<int>(a->gettype("<=>")->call({b})) == 1;
+            return convert<int>(a->gettype("<=>")->call_no_thunks({b})) == 1;
         })},
         {"r>", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
-            return convert<bool>(a->gettype("<=")->call({b}));
+            return convert<bool>(a->gettype("<=")->call_no_thunks({b}));
         })},
         {"<=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
-            return convert<int>(a->gettype("<=>")->call({b})) != 1;
+            return convert<int>(a->gettype("<=>")->call_no_thunks({b})) != 1;
         })},
-        {"r<=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) { return convert<bool>(a->gettype(">")->call({b})); })},
+        {"r<=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+            return convert<bool>(a->gettype(">")->call_no_thunks({b}));
+        })},
         {">=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
-            return convert<int>(a->gettype("<=>")->call({b})) != -1;
+            return convert<int>(a->gettype("<=>")->call_no_thunks({b})) != -1;
         })},
-        {"r>=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) { return convert<bool>(a->gettype("<")->call({b})); })},
+        {"r>=", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+            return convert<bool>(a->gettype("<")->call_no_thunks({b}));
+        })},
         {"+", unsupported_op("+")},
-        {"r+", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) { return a->gettype("+")->call({b}); })},
+        {"r+", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+            return a->gettype("+")->call({b});
+        })},
         {"-", unsupported_op("-")},
-        {"r-", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) { return a->gettype("-")->call({b})->gettype("u-")->call({}); })},
+        {"r-", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+            return a->gettype("-")->call_no_thunks({b})->gettype("u-")->call({});
+        })},
         {"*", unsupported_op("*")},
-        {"r*", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) { return a->gettype("*")->call({b}); })},
+        {"r*", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
+            return a->gettype("*")->call({b});
+        })},
         {"/", unsupported_op("/")},
         {"r/", unsupported_op("r/")},
         {"//", unsupported_op("//")},
@@ -187,14 +216,18 @@ std::pair<TypeRef, TypeRef> make_top_types() {
         {"__type__", create<Property>(create<BuiltinFunction>(method(&Object::obj_type)))}
     };
 
-    auto obj_type = std::make_shared<Type>(nullptr, "Object", Type::basevec{}, obj_attrs);
-    type_type->bases_ = type_type->mro_ = {obj_type};
-    return {type_type, obj_type};
+    auto obj_type = std::make_shared<Type>(type_type, "Object", Type::basevec{}, obj_attrs);
+    Object::type = obj_type;
+    type_type->bases_ = type_type->mro_ = bf_type->bases_ = bf_type->mro_ = p_type->bases_ = p_type->mro_ = {obj_type};
+    return {type_type, obj_type, bf_type};
 }
 
+// Defining the top of the hierarchy is ... difficult. And highly recursive.
+TypeRef Type::type;
+TypeRef Object::type;
+TypeRef BuiltinFunction::type;
+TypeRef Property::type;
 static auto top_types = make_top_types();
-TypeRef Type::type = top_types.first;
-TypeRef Object::type = top_types.second;
 
 std::vector<TypeRef> Type::make_mro(const std::vector<TypeRef>& bases) {
     // C3 superclass linearization algorithm
@@ -250,7 +283,7 @@ std::string Type::to_str() const {
     return "Type(" + name_ + ")";
 }
 
-ObjectRef Type::getattr(std::string name) const {
+BaseObjectRef Type::getattr(std::string name) const {
     auto iter = attrs_.find(name);
     if (iter == attrs_.end()) {
         return Object::getattr(name);
@@ -258,11 +291,9 @@ ObjectRef Type::getattr(std::string name) const {
     return iter->second;
 }
 
-ObjectRef Type::call(const std::vector<ObjectRef>& args) const {
-    return getattr("__new__")->call(args);
+BaseObjectRef Type::call(const std::vector<ObjectRef>& args) const {
+    return no_thunks(getattr("__new__"))->call(args);
 }
-
-TypeRef BuiltinFunction::type = create<Type>("BuiltinFunction", Type::basevec{Object::type});
 
 TypeRef Numeric::type = create<Type>("Numeric", Type::basevec{Object::type}, Type::attrmap{
 });
@@ -286,49 +317,49 @@ TypeRef Integer::type = create<Type>("Integer", Type::basevec{Numeric::type}, Ty
     {"u-", create<BuiltinFunction>([](const Integer* self) -> ObjectRef {
         return create<Integer>(-self->value);
     })},
-    {"+", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> ObjectRef {
+    {"+", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_int = dynamic_cast<const Integer*>(other.get())) {
             return create<Integer>(self->value + other_int->value);
         }
         return self->getsuper(Integer::type, "+")->call({other});
     })},
-    {"-", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> ObjectRef {
+    {"-", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_int = dynamic_cast<const Integer*>(other.get())) {
             return create<Integer>(self->value - other_int->value);
         }
         return self->getsuper(Integer::type, "-")->call({other});
     })},
-    {"*", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> ObjectRef {
+    {"*", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_int = dynamic_cast<const Integer*>(other.get())) {
             return create<Integer>(self->value * other_int->value);
         }
         return self->getsuper(Integer::type, "*")->call({other});
     })},
-    {"/", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> ObjectRef {
+    {"/", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_int = dynamic_cast<const Integer*>(other.get())) {
             return create<Float>(static_cast<double>(self->value) / other_int->value);
         }
         return self->getsuper(Integer::type, "/")->call({other});
     })},
-    {"//", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> ObjectRef {
+    {"//", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_int = dynamic_cast<const Integer*>(other.get())) {
             return create<Integer>(self->value / other_int->value);
         }
         return self->getsuper(Integer::type, "//")->call({other});
     })},
-    {"%", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> ObjectRef {
+    {"%", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_int = dynamic_cast<const Integer*>(other.get())) {
             return create<Integer>(self->value % other_int->value + (self->value < 0 ? other_int->value : 0));
         }
         return self->getsuper(Integer::type, "%")->call({other});
     })},
-    {"**", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> ObjectRef {
+    {"**", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_int = dynamic_cast<const Integer*>(other.get())) {
             return create<Integer>(intpow(self->value, other_int->value));
         }
         return self->getsuper(Integer::type, "**")->call({other});
     })},
-    {"<=>", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> ObjectRef {
+    {"<=>", create<BuiltinFunction>([](const Integer* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_int = dynamic_cast<const Integer*>(other.get())) {
             return create<Integer>(self->value == other_int->value ? 0 : (self->value < other_int->value ? -1 : 1));
         }
@@ -363,77 +394,77 @@ TypeRef Float::type = create<Type>("Float", Type::basevec{Numeric::type}, Type::
     {"u-", create<BuiltinFunction>([](const Float* self) -> ObjectRef {
         return create<Float>(-self->value);
     })},
-    {"+", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"+", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             return create<Float>(self->value + other_num->to_double());
         }
         return self->getsuper(Float::type, "+")->call({other});
     })},
-    {"-", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"-", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             return create<Float>(self->value - other_num->to_double());
         }
         return self->getsuper(Float::type, "-")->call({other});
     })},
-    {"*", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"*", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             return create<Float>(self->value * other_num->to_double());
         }
         return self->getsuper(Float::type, "*")->call({other});
     })},
-    {"/", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"/", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             return create<Float>(self->value / other_num->to_double());
         }
         return self->getsuper(Float::type, "/")->call({other});
     })},
-    {"r/", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"r/", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             return create<Float>(other_num->to_double() / self->value);
         }
         return self->getsuper(Float::type, "r/")->call({other});
     })},
-    {"//", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"//", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             // TODO Large numbers may botch this up
             return create<Integer>(self->value / other_num->to_double());
         }
         return self->getsuper(Float::type, "//")->call({other});
     })},
-    {"r//", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"r//", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             // TODO Large numbers may botch this up
             return create<Integer>(other_num->to_double() / self->value);
         }
         return self->getsuper(Float::type, "r//")->call({other});
     })},
-    {"%", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"%", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             // TODO Large numbers may botch this up
             return create<Float>(std::fmod(self->value, other_num->to_double()));
         }
         return self->getsuper(Float::type, "%")->call({other});
     })},
-    {"r%", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"r%", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             // TODO Large numbers may botch this up
             return create<Float>(std::fmod(other_num->to_double(), self->value));
         }
         return self->getsuper(Float::type, "r%")->call({other});
     })},
-    {"**", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"**", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             return create<Float>(std::pow(self->value, other_num->to_double()));
         }
         return self->getsuper(Float::type, "**")->call({other});
     })},
-    {"r**", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"r**", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_num = dynamic_cast<const Numeric*>(other.get())) {
             return create<Float>(std::pow(other_num->to_double(), self->value));
         }
         return self->getsuper(Float::type, "r**")->call({other});
     })},
-    {"<=>", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> ObjectRef {
+    {"<=>", create<BuiltinFunction>([](const Float* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_float = dynamic_cast<const Float*>(other.get())) {
             return create<Integer>(self->value == other_float->value ? 0 : (self->value < other_float->value ? -1 : 1));
         }
@@ -458,13 +489,13 @@ bool Float::to_bool() const {
 }
 
 TypeRef String::type = create<Type>("String", Type::basevec{Object::type}, Type::attrmap{
-    {"+", create<BuiltinFunction>([](const String* self, ObjectRef other) -> ObjectRef {
+    {"+", create<BuiltinFunction>([](const String* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_s = dynamic_cast<const String*>(other.get())) {
             return create<String>(self->value + other_s->value);
         }
         return self->getsuper(String::type, "+")->call({other});
     })},
-    {"*", create<BuiltinFunction>([](const String* self, ObjectRef other) -> ObjectRef {
+    {"*", create<BuiltinFunction>([](const String* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_i = dynamic_cast<const Integer*>(other.get())) {
             std::string res(self->value.size() * std::max(0l, other_i->get()), '\0');
             for (auto i = other_i->get(); i > 0;) {
@@ -474,7 +505,7 @@ TypeRef String::type = create<Type>("String", Type::basevec{Object::type}, Type:
         }
         return self->getsuper(String::type, "*")->call({other});
     })},
-    {"==", create<BuiltinFunction>([](const String* self, ObjectRef other) -> ObjectRef {
+    {"==", create<BuiltinFunction>([](const String* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_s = dynamic_cast<const String*>(other.get())) {
             return create<Boolean>(self->get() == other_s->get());
         }
@@ -494,13 +525,13 @@ std::size_t String::hash() const {
 }
 
 TypeRef Bytes::type = create<Type>("Bytes", Type::basevec{Object::type}, Type::attrmap{
-    {"+", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> ObjectRef {
+    {"+", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_s = dynamic_cast<const Bytes*>(other.get())) {
             return create<Bytes>(self->value + other_s->value);
         }
         return self->getsuper(Bytes::type, "+")->call({other});
     })},
-    {"*", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> ObjectRef {
+    {"*", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_i = dynamic_cast<const Integer*>(other.get())) {
             std::basic_string<unsigned char> res(self->value.size() * std::max(0l, other_i->get()), '\0');
             for (auto i = other_i->get(); i;) {
@@ -510,7 +541,7 @@ TypeRef Bytes::type = create<Type>("Bytes", Type::basevec{Object::type}, Type::a
         }
         return self->getsuper(Bytes::type, "*")->call({other});
     })},
-    {"==", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> ObjectRef {
+    {"==", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_s = dynamic_cast<const Bytes*>(other.get())) {
             return create<Boolean>(self->get() == other_s->get());
         }
@@ -549,13 +580,11 @@ std::string BoundMethod::to_str() const {
     return "BoundMethod(" + self->to_str() + ", " + func->to_str() + ")";
 }
 
-ObjectRef BoundMethod::call(const std::vector<ObjectRef>& args) const {
+BaseObjectRef BoundMethod::call(const std::vector<ObjectRef>& args) const {
     std::vector<ObjectRef> mod_args = args;
     mod_args.insert(mod_args.begin(), self);
     return func->call(mod_args);
 }
-
-TypeRef Property::type = create<Type>("Property", Type::basevec{Object::type});
 
 Property::Property(TypeRef type, ObjectRef func) : Object(type), func(func) {
 }
@@ -564,7 +593,7 @@ std::string Property::to_str() const {
     return "Property(" + func->to_str() + ")";
 }
 
-ObjectRef Property::call(const std::vector<ObjectRef>& args) const {
+BaseObjectRef Property::call(const std::vector<ObjectRef>& args) const {
     return func->call(args);
 }
 
@@ -610,7 +639,7 @@ TypeRef List::type = create<Type>("List", Type::basevec{Object::type}, Type::att
         std::vector<ObjectRef> res = {create<ListIterator>(self, 1), self->value.front()};
         return create<List>(res);
     })},
-    {"==", create<BuiltinFunction>([](const List* self, ObjectRef other) -> ObjectRef {
+    {"==", create<BuiltinFunction>([](const List* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_l = dynamic_cast<const List*>(other.get())) {
             if (self->value.size() != other_l->value.size()) {
                 return Boolean::false_;
@@ -660,45 +689,4 @@ TypeRef ListIterator::type = create<Type>("ListIterator", Type::basevec{Object::
 });
 
 ListIterator::ListIterator(TypeRef type, std::shared_ptr<const List> list, unsigned int position) : Object(type), list(list), position(position) {
-}
-
-
-TypeRef Thunk::type = create<Type>("Thunk", Type::basevec{Object::type});
-
-Thunk::Thunk(TypeRef type, ExecutionEngine* execengine) : Object(type), execengine(execengine) {
-}
-
-Thunk::~Thunk() {
-    if (!finalized) {
-        std::cerr << "Thunk " << this << " was not finalized!" << std::endl;
-    }
-}
-
-void Thunk::subscribe(std::shared_ptr<const Thunk> thunk) const {
-    execengine->subscribe_thunk(std::dynamic_pointer_cast<const Thunk>(shared_from_this()), thunk);
-}
-
-void Thunk::notify(ObjectRef /*obj*/) const {
-}
-
-void Thunk::finalize(ObjectRef obj) const {
-    const_cast<Thunk*>(this)->finalized = true;
-    execengine->finalize_thunk(std::dynamic_pointer_cast<const Thunk>(shared_from_this()), std::move(obj));
-}
-
-TypeRef Module::type = create<Type>("Module", Type::basevec{Object::type});
-
-Module::Module(TypeRef type, std::string name, std::map<std::string, ObjectRef> v) : Object(type), name(name), value(v) {
-}
-
-std::string Module::to_str() const {
-    return "Module(" + name + ")";
-}
-
-ObjectRef Module::getattr(std::string name) const {
-    auto iter = value.find(name);
-    if (iter == value.end()) {
-        return Object::getattr(name);
-    }
-    return iter->second;
 }

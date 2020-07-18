@@ -9,29 +9,36 @@
 #include <functional>
 #include <stdexcept>
 
+class BaseObject : public std::enable_shared_from_this<BaseObject> {
+public:
+    virtual ~BaseObject() = default;
+};
+
+using BaseObjectRef = std::shared_ptr<const BaseObject>;
 class Object;
 using ObjectRef = std::shared_ptr<const Object>;
 class Type;
 using TypeRef = std::shared_ptr<const Type>;
 
-class Object : public std::enable_shared_from_this<Object> {
+class Object : public BaseObject {
     TypeRef type_;
 public:
     Object(TypeRef type);
-    virtual ~Object() = default;
     virtual std::string to_str() const;
     static TypeRef type;
     virtual bool to_bool() const;
     virtual std::size_t hash() const;
     bool eq(ObjectRef other) const;
     TypeRef obj_type() const;
-    // TODO: The below doesn't seem quite right. Intuitivly, getattr is a function provided by the type. But this works for now.
+    // TODO: The below doesn't seem quite right. Intuitively, getattr is a function provided by the type. But this works for now.
     ObjectRef getsuper(TypeRef type, std::string name) const;
     ObjectRef gettype(std::string name) const;
-    virtual ObjectRef getattr(std::string name) const;
-    virtual ObjectRef call(const std::vector<ObjectRef>& args) const;
+    virtual BaseObjectRef getattr(std::string name) const;
+    virtual BaseObjectRef call(const std::vector<ObjectRef>& args) const;
+    ObjectRef call_no_thunks(const std::vector<ObjectRef>& args) const;
+    ObjectRef self() const { return std::dynamic_pointer_cast<const Object>(BaseObject::shared_from_this());}
 
-    friend std::pair<TypeRef, TypeRef> make_top_types();
+    friend std::vector<TypeRef> make_top_types();
 };
 
 template<class T, class... Args> std::shared_ptr<const T> create(Args... args) {
@@ -50,8 +57,8 @@ public:
     Type(TypeRef type, std::string name, std::vector<TypeRef> bases, std::map<std::string, ObjectRef> attr={});
     std::string to_str() const override;
     static TypeRef type;
-    ObjectRef getattr(std::string name) const override;
-    ObjectRef call(const std::vector<ObjectRef>& args) const override;
+    BaseObjectRef getattr(std::string name) const override;
+    BaseObjectRef call(const std::vector<ObjectRef>& args) const override;
     std::string name() const { return name_; }
     const std::vector<TypeRef>& mro() const { return mro_; }
     const std::map<std::string, ObjectRef>& attrs() const { return attrs_; }
@@ -59,11 +66,11 @@ public:
     using attrmap = std::map<std::string, ObjectRef>;
     using basevec = std::vector<TypeRef>;
 
-    friend std::pair<TypeRef, TypeRef> make_top_types();
+    friend std::vector<TypeRef> make_top_types();
 };
 
 struct AbstractFunctionHolder {
-    virtual ObjectRef call(const std::vector<ObjectRef>& args) const = 0;
+    virtual BaseObjectRef call(const std::vector<ObjectRef>& args) const = 0;
     virtual ~AbstractFunctionHolder() = default;
 };
 
@@ -71,16 +78,16 @@ template<class T> struct convert_from_objref {
     static T convert(const ObjectRef& objref);
 };
 template<class T> struct convert_to_objref {
-    static ObjectRef convert(const T& t);
+    static BaseObjectRef convert(const T& t);
 };
 
 template<class T, class... Args> struct FunctionHolder : public AbstractFunctionHolder {
     std::function<T(Args...)> f;
     FunctionHolder(std::function<T(Args...)> f) : f(f) {}
-    ObjectRef call(const std::vector<ObjectRef>& args) const {
+    BaseObjectRef call(const std::vector<ObjectRef>& args) const {
         return call(args, std::index_sequence_for<Args...>{});
     }
-    template<class I, I... Ints> ObjectRef call(const std::vector<ObjectRef>& args, std::integer_sequence<I, Ints...>) const {
+    template<class I, I... Ints> BaseObjectRef call(const std::vector<ObjectRef>& args, std::integer_sequence<I, Ints...>) const {
         if (sizeof...(Args) != args.size()) {
             throw std::runtime_error("Wrong number of args");
         }
@@ -91,7 +98,7 @@ template<class T, class... Args> struct FunctionHolder : public AbstractFunction
 template<class T> struct FunctionHolder<T, const std::vector<ObjectRef>&> : public AbstractFunctionHolder {
     std::function<T(const std::vector<ObjectRef>&)> f;
     FunctionHolder(std::function<T(const std::vector<ObjectRef>&)> f) : f(f) {}
-    ObjectRef call(const std::vector<ObjectRef>& args) const { return convert_to_objref<T>::convert(f(args)); }
+    BaseObjectRef call(const std::vector<ObjectRef>& args) const { return convert_to_objref<T>::convert(f(args)); }
 };
 
 class BuiltinFunction : public Object {
@@ -99,7 +106,7 @@ class BuiltinFunction : public Object {
 public:
     template<class F> BuiltinFunction(TypeRef type, F f) : Object(type), func(new FunctionHolder(std::function(f))) {}
     static TypeRef type;
-    ObjectRef call(const std::vector<ObjectRef>& args) const override { return func->call(args); }
+    BaseObjectRef call(const std::vector<ObjectRef>& args) const override { return func->call(args); }
 };
 
 class Numeric : public Object {
@@ -175,7 +182,7 @@ public:
     BoundMethod(TypeRef type, ObjectRef self, ObjectRef func);
     std::string to_str() const override;
     static TypeRef type;
-    ObjectRef call(const std::vector<ObjectRef>& args) const override;
+    BaseObjectRef call(const std::vector<ObjectRef>& args) const override;
 };
 
 class Property : public Object {
@@ -184,7 +191,7 @@ public:
     Property(TypeRef type, ObjectRef func);
     std::string to_str() const override;
     static TypeRef type;
-    ObjectRef call(const std::vector<ObjectRef>& args) const override;
+    BaseObjectRef call(const std::vector<ObjectRef>& args) const override;
 };
 
 struct ObjectRefHash {
@@ -225,32 +232,6 @@ class ListIterator : public Object {
 public:
     ListIterator(TypeRef type, std::shared_ptr<const List> list, unsigned int position=0);
     static TypeRef type;
-};
-
-class ExecutionEngine;
-
-class Thunk : public Object {
-    ExecutionEngine* execengine;
-    bool finalized = false;
-public:
-    Thunk(TypeRef type, ExecutionEngine* execengine);
-    ~Thunk();
-    static TypeRef type;
-    // Naughty method
-    void subscribe(std::shared_ptr<const Thunk> thunk) const;
-    virtual void notify(ObjectRef obj) const;
-    void finalize(ObjectRef obj) const;
-    ExecutionEngine* execution_engine() const { return execengine; }
-};
-
-class Module : public Object {
-    std::string name;
-    std::map<std::string, ObjectRef> value;
-public:
-    Module(TypeRef type, std::string name, std::map<std::string, ObjectRef> v);
-    std::string to_str() const override;
-    static TypeRef type;
-    ObjectRef getattr(std::string name) const override;
 };
 
 #endif // OBJECT_HPP

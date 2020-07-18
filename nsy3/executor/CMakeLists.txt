@@ -27,6 +27,7 @@ enable_cxx_compiler_flag_if_supported("-fdiagnostics-color=always")
 
 set(PROJECT_FILES
         src/object.cpp
+        src/thunk.cpp
         src/bytecode.cpp
         src/frame.cpp
         src/serialisation.cpp

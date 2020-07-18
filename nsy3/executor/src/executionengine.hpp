@@ -2,6 +2,7 @@
 #define EXECUTIONENGINE_HPP
 
 #include "object.hpp"
+#include "thunk.hpp"
 
 class TestThunk;
 class GetThunk;
@@ -12,7 +13,7 @@ using DollarName = std::vector<std::string>;
 struct ExecutionState {
     std::vector<std::shared_ptr<const TestThunk>> test_thunks;
     std::multimap<std::shared_ptr<const Thunk>, std::shared_ptr<const Thunk>> thunk_subscriptions;
-    std::vector<std::pair<std::shared_ptr<const Thunk>, ObjectRef>> thunk_results;
+    std::vector<std::pair<std::shared_ptr<const Thunk>, BaseObjectRef>> thunk_results;
     std::multimap<DollarName, std::shared_ptr<const GetThunk>> get_thunks;
     std::multimap<DollarName, std::shared_ptr<const SetThunk>> set_thunks;
     std::map<DollarName, ObjectRef> dollar_values;
@@ -26,10 +27,10 @@ class ExecutionEngine {
     std::multimap<DollarName, DollarName> ordering;
     ExecutionState state, initial_state;
 
-    ObjectRef test_thunk(std::string name);
+    BaseObjectRef test_thunk(std::string name);
     ObjectRef import_(std::string name);
-    ObjectRef dollar_get(DollarName name, unsigned int flags);
-    ObjectRef dollar_set(DollarName, ObjectRef value, unsigned int flags);
+    BaseObjectRef dollar_get(DollarName name, unsigned int flags);
+    BaseObjectRef dollar_set(DollarName, ObjectRef value, unsigned int flags);
 
     void resolve_dollar(DollarName);
     void notify_thunks();
@@ -42,13 +43,13 @@ public:
     void exec_file(std::string fname);
     void exec_runspec(ObjectRef runspec);
     void subscribe_thunk(std::shared_ptr<const Thunk> source, std::shared_ptr<const Thunk> dest);
-    void finalize_thunk(std::shared_ptr<const Thunk> source, ObjectRef result);
+    void finalize_thunk(std::shared_ptr<const Thunk> source, BaseObjectRef result);
 };
 
 class TestThunk : public Thunk {
     std::string name;
 public:
-    TestThunk(TypeRef type, ExecutionEngine* execengine, std::string name);
+    TestThunk(ExecutionEngine* execengine, std::string name);
     std::string to_str() const override;
 };
 
@@ -56,7 +57,7 @@ class GetThunk : public Thunk {
     DollarName name;
     unsigned int flags;
 public:
-    GetThunk(TypeRef type, ExecutionEngine* execengine, DollarName name, unsigned int flags);
+    GetThunk(ExecutionEngine* execengine, DollarName name, unsigned int flags);
     std::string to_str() const override;
 
     friend class ExecutionEngine;
@@ -67,7 +68,7 @@ class SetThunk : public Thunk {
     ObjectRef value;
     unsigned int flags;
 public:
-    SetThunk(TypeRef type, ExecutionEngine* execengine, DollarName name, ObjectRef value, unsigned int flags);
+    SetThunk(ExecutionEngine* execengine, DollarName name, ObjectRef value, unsigned int flags);
     std::string to_str() const override;
 
     friend class ExecutionEngine;
