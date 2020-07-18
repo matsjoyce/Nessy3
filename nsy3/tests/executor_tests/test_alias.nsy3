@@ -1,0 +1,32 @@
+$x = 1
+$y += 1
+alias($$x, $$y)
+
+$a = 1
+$b @default = 2
+alias($$a, $$b)
+
+$p = 1
+$q += 1
+if $z:
+    alias($$p, $$q)
+
+
+$r = 2
+$s @default = 1
+if $z:
+    alias($$r, $$s)
+
+$z = 1
+
+if test_thunk("final"):
+    print("Assertions: 5")
+
+    assert $x == 2
+    assert $y == 2
+
+    assert $b == 1
+
+    assert $p == 2
+
+    assert $r == 2

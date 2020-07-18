@@ -36,13 +36,14 @@ def decode_string(str):
 
 
 class NSY2Lexer(Lexer):
-    tokens = {NAME, AT, DOLLER, NUMBER, STRING, DOT, COMMA, EQEQ, ARROW, LAMBDA, NEQ, EQ,
+    tokens = {NAME, AT, DOLLER, DOLLERDOLLER, NUMBER, STRING, DOT, COMMA, EQEQ, ARROW, LAMBDA, NEQ, EQ,
               PLUSEQ, PLUS, MINUSEQ, MINUS, STAREQ, STAR, STARSTAREQ, STARSTAR, SLASHEQ, SLASH, SLASHSLASHEQ, SLASHSLASH, PERCENTEQ, PERCENT,
               LBRAK, RBRAK, LPAREN, RPAREN, LCURLY, RCURLY, LTE, GTE, LT, GT, COLON, COLONPLUS, COLONPLUSEQ, TRUE, FALSE, IF, ELSE, ELIF, FOR, WHILE,
               IN, AND, OR, NOT, DEF, RETURN, BREAK, CONTINUE, PASS, ASSERT, IMPORT, FROM, AS, WHITESPACE, INDENT, DEDENT, NEWLINE}
 
     NAME = r"[a-zA-Z_][a-zA-Z_0-9']*"
     AT = r"@"
+    DOLLERDOLLER = r"\$\$"
     DOLLER = r"\$"
     EQEQ = r"=="
     ARROW = r"->"
@@ -473,6 +474,10 @@ class NSY2Parser(Parser):
     def expr(self, p):
         return ast.DollarName(p, p.multipartname, p.dflags)
 
+    @_("DOLLERDOLLER multipartname")
+    def expr(self, p):
+        return ast.SequenceLiteral(p, "[]", p.multipartname)
+
     @_("NAME")
     def multipartname(self, p):
         return [ast.Literal(p, p.NAME)]
@@ -493,7 +498,7 @@ class NSY2Parser(Parser):
 
     @_("dflags AT NAME")
     def dflags(self, p):
-        return p.dflags + [ast.Literal(p, p.NAME)]
+        return p.dflags + [p.NAME]
 
     @_("")
     def args(self, p):

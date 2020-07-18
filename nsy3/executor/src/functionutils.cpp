@@ -65,7 +65,3 @@ BaseObjectRef convert_to_objref<double>::convert(const double& t) {
 BaseObjectRef convert_to_objref<std::string>::convert(const std::string& t) {
     return create<String>(t);
 }
-
-BaseObjectRef convert_to_objref<void>::convert() {
-    return NoneType::none;
-}

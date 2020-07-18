@@ -63,7 +63,6 @@ template<> struct convert_to_objref<int> { static BaseObjectRef convert(const in
 template<> struct convert_to_objref<bool> { static BaseObjectRef convert(const bool& objref); };
 template<> struct convert_to_objref<double> { static BaseObjectRef convert(const double& objref); };
 template<> struct convert_to_objref<std::string> { static BaseObjectRef convert(const std::string& objref); };
-template<> struct convert_to_objref<void> { static BaseObjectRef convert(); };
 template<class T> struct convert_to_objref<std::shared_ptr<const T>> {
     static BaseObjectRef convert(const std::shared_ptr<const T>& objref) {
         return objref;

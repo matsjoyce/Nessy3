@@ -18,6 +18,7 @@ struct ExecutionState {
     std::multimap<DollarName, std::shared_ptr<const SetThunk>> set_thunks;
     std::map<DollarName, ObjectRef> dollar_values;
     std::vector<DollarName> resolution_order;
+    std::map<DollarName, DollarName> aliases;
 };
 
 
@@ -31,6 +32,7 @@ class ExecutionEngine {
     ObjectRef import_(std::string name);
     BaseObjectRef dollar_get(DollarName name, unsigned int flags);
     BaseObjectRef dollar_set(DollarName, ObjectRef value, unsigned int flags);
+    void make_alias(DollarName name, DollarName alias);
 
     void resolve_dollar(DollarName);
     void notify_thunks();
@@ -44,6 +46,7 @@ public:
     void exec_runspec(ObjectRef runspec);
     void subscribe_thunk(std::shared_ptr<const Thunk> source, std::shared_ptr<const Thunk> dest);
     void finalize_thunk(std::shared_ptr<const Thunk> source, BaseObjectRef result);
+    DollarName dealias(const DollarName& name);
 };
 
 class TestThunk : public Thunk {

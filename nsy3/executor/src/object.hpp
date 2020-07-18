@@ -69,6 +69,16 @@ public:
     friend std::vector<TypeRef> make_top_types();
 };
 
+class NoneType : public Object {
+    std::string value;
+    NoneType(TypeRef type);
+public:
+    std::string to_str() const override;
+    static TypeRef type;
+    bool to_bool() const override;
+    static std::shared_ptr<const NoneType> none;
+};
+
 struct AbstractFunctionHolder {
     virtual BaseObjectRef call(const std::vector<ObjectRef>& args) const = 0;
     virtual ~AbstractFunctionHolder() = default;
@@ -92,6 +102,21 @@ template<class T, class... Args> struct FunctionHolder : public AbstractFunction
             throw std::runtime_error("Wrong number of args");
         }
         return convert_to_objref<T>::convert(f(convert_from_objref<Args>::convert(args[Ints])...));
+    }
+};
+
+template<class... Args> struct FunctionHolder<void, Args...> : public AbstractFunctionHolder {
+    std::function<void(Args...)> f;
+    FunctionHolder(std::function<void(Args...)> f) : f(f) {}
+    BaseObjectRef call(const std::vector<ObjectRef>& args) const {
+        return call(args, std::index_sequence_for<Args...>{});
+    }
+    template<class I, I... Ints> BaseObjectRef call(const std::vector<ObjectRef>& args, std::integer_sequence<I, Ints...>) const {
+        if (sizeof...(Args) != args.size()) {
+            throw std::runtime_error("Wrong number of args");
+        }
+        f(convert_from_objref<Args>::convert(args[Ints])...);
+        return NoneType::none;
     }
 };
 
@@ -164,16 +189,6 @@ public:
     std::string to_str() const override;
     static TypeRef type;
     std::basic_string<unsigned char> get() const { return value; }
-};
-
-class NoneType : public Object {
-    std::string value;
-    NoneType(TypeRef type);
-public:
-    std::string to_str() const override;
-    static TypeRef type;
-    bool to_bool() const override;
-    static std::shared_ptr<const NoneType> none;
 };
 
 class BoundMethod : public Object {

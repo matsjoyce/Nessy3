@@ -67,7 +67,6 @@ inline unsigned int stack_push(unsigned char flags, const BaseObjectRef& item, c
     return position;
 }
 
-
 std::map<std::string, BaseObjectRef> Frame::execute() const {
     const auto& code = code_->code;
     const auto& consts = code_->consts;
@@ -250,7 +249,6 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
                     args.push_back(iter->second);
                 }
                 stack.erase(pos_iter, stack.end());
-                // No stack_push needed since this isn't a thunk
                 stack.emplace_back(std::make_pair(0, create<List>(args)));
                 break;
             }
@@ -275,12 +273,10 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
                 for (auto i = 0u; i < (arg & HALF_INT_MAX); ++i) {
                     if (i == (arg >> 16)) {
                         std::vector<ObjectRef> subseq(lst->get().begin() + idx, lst->get().end() + (arg >> 16) - (arg & HALF_INT_MAX));
-                        // No stack_push needed since this isn't a thunk
                         stack.emplace_back(std::make_pair(0, create<List>(subseq)));
                         idx += subseq.size();
                     }
                     else {
-                        // Same as above
                         stack.emplace_back(std::make_pair(0, lst->get()[idx++]));
                     }
                 }
