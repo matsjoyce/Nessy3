@@ -1,0 +1,70 @@
+print("Assertions: 10")
+
+# For comprehensions
+
+x = [1, 2, 3]
+
+assert [i * i for i in x] == [1, 4, 9]
+
+y = [1, 10, 100]
+
+assert [i * j for i in x for j in y] == [1, 10, 100, 2, 20, 200, 3, 30, 300]
+assert [i * j for i in x for j in y if i <= j] == [1, 10, 100, 20, 200, 30, 300]
+assert [i * j for i in x if i != 2 for j in y if i <= j if j != 100] == [1, 10, 30]
+
+# For loops
+
+# Fibonacci
+
+a = 0
+b = 1
+fibs = []
+while a < 100:
+    fibs :+= a
+    t = a
+    a = b
+    b = a + t
+
+assert a == 144
+assert fibs == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]
+
+# Nested
+
+s = 0
+for i in x:
+    for j in [10, 20, 30]:
+        s += i * j
+
+assert s == 360
+
+# Break and continue
+
+q = 1
+for fib in fibs:
+    if fib % 2 or fib == 0:
+        continue
+    if fib == 34:
+        break
+    q *= fib
+
+assert q == 16
+
+# With thunks!
+
+# Thunk as the iter variable
+
+x = [1, 2, 3, test_thunk("a")]
+q = 0
+for i in x:
+    q += i * i
+
+assert q == 15
+
+# Thunk inside loop
+
+x = [1, 2, 3]
+q = 0
+for i in x:
+    q += i * i * test_thunk("k")
+
+assert q == 14

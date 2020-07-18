@@ -98,7 +98,15 @@ std::size_t Object::hash() const {
 }
 
 bool Object::eq(ObjectRef other) const {
-    return other.get() == this;
+    try {
+        return gettype("==")->call({other})->to_bool();
+    }
+    catch (const ObjectRef& exc) {
+        if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
+            return other->gettype("r==")->call({shared_from_this()})->to_bool();
+        }
+        throw;
+    }
 }
 
 bool Object::to_bool() const {
@@ -123,12 +131,10 @@ std::pair<TypeRef, TypeRef> make_top_types() {
         {"<=>", unsupported_op("<=>")},
         {"==", create<BuiltinFunction>([](ObjectRef a, ObjectRef b) {
             try {
-                std::cerr << "A==" << std::endl;
                 return convert<int>(a->gettype("<=>")->call({b})) == 0;
             }
             catch (const ObjectRef& exc) {
                 if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
-                    std::cerr << "B==" << std::endl;
                     return a.get() == b.get();
                 }
                 throw;
@@ -342,6 +348,9 @@ bool Integer::to_bool() const {
 }
 
 TypeRef Boolean::type = create<Type>("Boolean", Type::basevec{Numeric::type});
+// TODO long winded since I might make the constructor private
+std::shared_ptr<const Boolean> Boolean::true_ = std::shared_ptr<Boolean>(new Boolean(Boolean::type, 1));
+std::shared_ptr<const Boolean> Boolean::false_ = std::shared_ptr<Boolean>(new Boolean(Boolean::type, 0));
 
 Boolean::Boolean(TypeRef type, bool v) : Integer(type, v) {
 }
@@ -484,13 +493,6 @@ std::size_t String::hash() const {
     return std::hash<std::string>{}(value);
 }
 
-bool String::eq(ObjectRef other) const {
-    if (auto c_other = dynamic_cast<const String*>(other.get())) {
-        return value == c_other->value;
-    }
-    return false;
-}
-
 TypeRef Bytes::type = create<Type>("Bytes", Type::basevec{Object::type}, Type::attrmap{
     {"+", create<BuiltinFunction>([](const Bytes* self, ObjectRef other) -> ObjectRef {
         if (auto other_s = dynamic_cast<const Bytes*>(other.get())) {
@@ -522,6 +524,21 @@ Bytes::Bytes(TypeRef type, std::basic_string<unsigned char> v) : Object(type), v
 std::string Bytes::to_str() const {
     return "Bytes";
 }
+
+TypeRef NoneType::type = create<Type>("NoneType", Type::basevec{Object::type});
+std::shared_ptr<const NoneType> NoneType::none = std::shared_ptr<NoneType>(new NoneType(NoneType::type));
+
+NoneType::NoneType(TypeRef type) : Object(type) {
+}
+
+std::string NoneType::to_str() const {
+    return "NONE";
+}
+
+bool NoneType::to_bool() const {
+    return false;
+}
+
 
 TypeRef BoundMethod::type = create<Type>("BoundMethod", Type::basevec{Object::type});
 
@@ -585,7 +602,33 @@ TypeRef List::type = create<Type>("List", Type::basevec{Object::type}, Type::att
             create<IndexException>("Index is out of bounds")->raise();
         }
         return self->value[idx->get()];
-    })}
+    })},
+    {"__iter__", create<BuiltinFunction>([](std::shared_ptr<const List> self) -> ObjectRef {
+        if (!self->value.size()) {
+            return NoneType::none;
+        }
+        std::vector<ObjectRef> res = {create<ListIterator>(self, 1), self->value.front()};
+        return create<List>(res);
+    })},
+    {"==", create<BuiltinFunction>([](const List* self, ObjectRef other) -> ObjectRef {
+        if (auto other_l = dynamic_cast<const List*>(other.get())) {
+            if (self->value.size() != other_l->value.size()) {
+                return Boolean::false_;
+            }
+            for (auto iter_a = self->value.begin(), iter_b = other_l->value.begin(); iter_a != self->value.end(); ++iter_a, ++iter_b) {
+                if (!(*iter_a)->eq(*iter_b)) {
+                    return Boolean::false_;
+                }
+            }
+            return Boolean::true_;
+        }
+        return self->getsuper(List::type, "==")->call({other});
+    })},
+    {":+", create<BuiltinFunction>([](const List* self, ObjectRef obj) {
+        std::vector<ObjectRef> res = self->value;
+        res.push_back(obj);
+        return create<List>(res);
+    })},
 });
 
 List::List(TypeRef type, std::vector<ObjectRef> v) : Object(type), value(v) {
@@ -605,6 +648,20 @@ std::string List::to_str() const {
     ss << "]";
     return ss.str();
 }
+
+TypeRef ListIterator::type = create<Type>("ListIterator", Type::basevec{Object::type}, Type::attrmap{
+    {"__iter__", create<BuiltinFunction>([](const ListIterator* self) -> ObjectRef {
+        if (self->position >= self->list->get().size() ) {
+            return NoneType::none;
+        }
+        std::vector<ObjectRef> res = {create<ListIterator>(self->list, self->position + 1), self->list->get()[self->position]};
+        return create<List>(res);
+    })}
+});
+
+ListIterator::ListIterator(TypeRef type, std::shared_ptr<const List> list, unsigned int position) : Object(type), list(list), position(position) {
+}
+
 
 TypeRef Thunk::type = create<Type>("Thunk", Type::basevec{Object::type});
 

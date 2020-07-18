@@ -34,13 +34,27 @@ int assert(ObjectRef obj) {
 }
 
 std::map<std::string, ObjectRef> builtins = {
+    // Types
+    {"Object", Object::type},
+    {"Float", Float::type},
+    {"Integer", Integer::type},
+    {"Boolean", Boolean::type},
+    {"String", String::type},
+    {"Bytes", Bytes::type},
+    {"List", List::type},
+    {"Dict", Dict::type},
+
+    // Consts
+    {"TRUE", Boolean::true_},
+    {"FALSE", Boolean::false_},
+    {"NONE", NoneType::none},
+
+    // Functions
     {"print", create<BuiltinFunction>(print)},
     {"->", create<BuiltinFunction>(arrow)},
     {"Signature", Signature::type},
     {"[]", create<BuiltinFunction>(braks)},
     {"assert", create<BuiltinFunction>(assert)},
     {"not", create<BuiltinFunction>(not_)},
-    {"Float", Float::type},
-    {"Integer", Integer::type},
-    {"Object", Object::type}
+
 };

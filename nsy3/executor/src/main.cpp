@@ -6,13 +6,14 @@
 #include "executionengine.hpp"
 #include "exception.hpp"
 #include "serialisation.hpp"
+#include "frame.hpp"
 
 
 static const char USAGE[] =
 R"(fs
 
     Usage:
-        executor runspec <rsfile> [--nocatch]
+        executor runspec <rsfile> [--nocatch] [--debug]
         executor run <files>...
 
     Options:
@@ -24,6 +25,9 @@ R"(fs
 int main(int argc, const char** argv) {
     auto args = docopt::docopt(USAGE, {argv + 1, argv + argc}, true, "executor 0.1");
     ObjectRef runspec;
+    if (args["--debug"].asBool()) {
+        Frame::execution_debug_level = 1;
+    }
     if (args["runspec"].asBool()) {
         if (args["<rsfile>"].asString() == "-") {
             runspec = deserialise_from_file(std::cin);

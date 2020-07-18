@@ -38,7 +38,7 @@ def decode_string(str):
 class NSY2Lexer(Lexer):
     tokens = {NAME, AT, DOLLER, NUMBER, STRING, DOT, COMMA, EQEQ, ARROW, LAMBDA, NEQ, EQ,
               PLUSEQ, PLUS, MINUSEQ, MINUS, STAREQ, STAR, STARSTAREQ, STARSTAR, SLASHEQ, SLASH, SLASHSLASHEQ, SLASHSLASH, PERCENTEQ, PERCENT,
-              LBRAK, RBRAK, LPAREN, RPAREN, LCURLY, RCURLY, LTE, GTE, LT, GT, COLON, TRUE, FALSE, IF, ELSE, ELIF, FOR, WHILE,
+              LBRAK, RBRAK, LPAREN, RPAREN, LCURLY, RCURLY, LTE, GTE, LT, GT, COLON, COLONPLUS, COLONPLUSEQ, TRUE, FALSE, IF, ELSE, ELIF, FOR, WHILE,
               IN, AND, OR, NOT, DEF, RETURN, BREAK, CONTINUE, PASS, ASSERT, IMPORT, FROM, AS, WHITESPACE, INDENT, DEDENT, NEWLINE}
 
     NAME = r"[a-zA-Z_][a-zA-Z_0-9']*"
@@ -75,7 +75,9 @@ class NSY2Lexer(Lexer):
     GTE = r">="
     LT = r"<"
     GT = r">"
-    COLON = ":"
+    COLONPLUSEQ = r":\+="
+    COLONPLUS = r":\+"
+    COLON = r":"
     NAME["true"] = TRUE
     NAME["false"] = FALSE
     NAME["if"] = IF
@@ -202,10 +204,12 @@ class NSY2Parser(Parser):
         ("nonassoc", LOWPREC),
         ("left", ARROW, LAMBDA),
         ("right", IFEXPR, IF, ELSE),
+        ("left", COMP),
         ("left", OR),
         ("left", AND),
         ("right", NOT),
         ("nonassoc", LTE, GTE, LT, GT, EQEQ, NEQ),
+        ("left", COLONPLUSEQ),
         ("left", PLUS, MINUS),
         ("left", STAR, SLASH, SLASHSLASH, PERCENT),
         ("right", UMINUS),
@@ -405,7 +409,10 @@ class NSY2Parser(Parser):
 
         # Logs
         "expr AND expr",
-        "expr OR expr"
+        "expr OR expr",
+
+        # Seqs
+        "expr COLONPLUS expr",
     )
     def expr(self, p):
         return ast.Binop(p, p[1], p.expr0, p.expr1)
@@ -438,6 +445,9 @@ class NSY2Parser(Parser):
         "NAME SLASHSLASHEQ expr",
         "NAME PERCENTEQ expr",
         "NAME STARSTAREQ expr",
+
+        # Seqs
+        "NAME COLONPLUSEQ expr",
     )
     def simple_stmt(self, p):
         return ast.AssignStmt(p, p[0], ast.Binop(p, p[1][:-1], ast.Name(p, p[0]), p.expr))
@@ -541,6 +551,10 @@ class NSY2Parser(Parser):
     def seq(self, p):
         return [p.expr]
 
+    @_("comp")
+    def seq(self, p):
+        return p.comp
+
     @_("seq COMMA expr")
     def seq(self, p):
         p.seq.append(p.expr)
@@ -554,6 +568,35 @@ class NSY2Parser(Parser):
     def seq(self, p):
         p.seq.append((p.expr0, p.expr1))
         return p.seq
+
+    @_("expr comp_trailer")
+    def comp(self, p):
+        return ast.CompExpr(p, p.expr, p.comp_trailer)
+
+    @_("expr COLON expr comp_trailer")
+    def comp(self, p):
+        return ast.CompExpr(p, (p.expr0, p.expr1), p.comp_trailer)
+
+    @_("comp_for")
+    def comp_trailer(self, p):
+        return [p.comp_for]
+
+    @_("comp_trailer comp_for")
+    def comp_trailer(self, p):
+        return p.comp_trailer + [p.comp_for]
+
+    @_("comp_trailer comp_if")
+    def comp_trailer(self, p):
+        return p.comp_trailer + [p.comp_if]
+
+    @_("FOR NAME IN expr %prec COMP")
+    def comp_for(self, p):
+        return ast.CompForExpr(p, p.NAME, p.expr)
+
+    @_("IF expr %prec COMP")
+    def comp_if(self, p):
+        return ast.CompIfExpr(p, p.expr)
+
 
     def error(self, p):
         print(self.__dict__)

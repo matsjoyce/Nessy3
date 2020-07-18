@@ -18,11 +18,17 @@ enum class Ops : unsigned char {
     JUMP,
     JUMP_IF,
     JUMP_IFNOT,
+    JUMP_IF_KEEP,
+    JUMP_IFNOT_KEEP,
     DROP,
     RETURN,
     GETENV,
     SETSKIP,
-    DUP
+    DUP,
+    ROT,
+    RROT,
+    BUILDLIST,
+    UNPACK
 };
 
 class Code : public Object {

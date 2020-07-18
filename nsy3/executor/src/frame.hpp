@@ -23,6 +23,8 @@ public:
     std::shared_ptr<const Code> code() const { return code_; }
     std::map<std::string, ObjectRef> env() const { return env_; }
 
+    static int execution_debug_level;
+
     friend class ExecutionThunk;
 };
 

@@ -104,11 +104,7 @@ class Seq:
 class Bytecode(metaclass=BCodeMeta):
     KWARG = BCodeType("name", ("value"))
     GETATTR = BCodeType(subs=("obj", "name"))
-    CALL = BCodeType(subs=("func", "args"), auto_arg=lambda s: len(s) - 1)
-    # Symmetric reflected binary operator
-    #SYMREFBINOP = BCodeType("op", subs=("left", "right"))
-    # Unsymmetric reflected binary operator
-    #UNSYMREFBINOP = BCodeType("op", subs=("left", "right"))
+    CALL = BCodeType(subs=("func", "*args"), auto_arg=lambda s: len(s) - 1)
     BINOP = BCodeType("op", subs=("left", "right"))
     GET = BCodeType("name")
     SET = BCodeType("name", ("value"))
@@ -116,6 +112,9 @@ class Bytecode(metaclass=BCodeMeta):
     JUMP = BCodeType("pos")
     JUMP_IF = BCodeType("pos", ("cond"))
     JUMP_IFNOT = BCodeType("pos", ("cond"))
+    # No pop versions
+    JUMP_IF_KEEP = BCodeType("pos", ("cond"))
+    JUMP_IFNOT_KEEP = BCodeType("pos", ("cond"))
     DROP = BCodeType("num")
     RETURN = BCodeType(subs=("expr"))
     GETENV = BCodeType()
@@ -123,6 +122,12 @@ class Bytecode(metaclass=BCodeMeta):
     # second half: number of stack elements to keep
     SETSKIP = BCodeType("pos")
     DUP = BCodeType("times")
+    ROT = BCodeType("num")
+    RROT = BCodeType("num")
+    BUILDLIST = BCodeType("len", subs=("*items"))
+    # first half: number of variables
+    # second half: idx of * variable
+    UNPACK = BCodeType("arg")
 
     # Fake ops
 

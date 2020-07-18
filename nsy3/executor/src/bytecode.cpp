@@ -69,11 +69,17 @@ void Code::print(std::ostream& stream) const {
             case Ops::JUMP: stream << "JUMP " << arg << "\n"; break;
             case Ops::JUMP_IF: stream << "JUMP_IF " << arg << "\n"; break;
             case Ops::JUMP_IFNOT: stream << "JUMP_IFNOT " << arg << "\n"; break;
+            case Ops::JUMP_IF_KEEP: stream << "JUMP_IF_KEEP " << arg << "\n"; break;
+            case Ops::JUMP_IFNOT_KEEP: stream << "JUMP_IFNOT_KEEP " << arg << "\n"; break;
             case Ops::DROP: stream << "DROP " << arg << "\n"; break;
             case Ops::RETURN: stream << "RETURN " << arg << "\n"; break;
             case Ops::GETENV: stream << "GETENV " << arg << "\n"; break;
             case Ops::SETSKIP: stream << "SETSKIP " << (arg & 0xFFFF) << " " << (arg >> 16) << "\n"; break;
             case Ops::DUP: stream << "DUP " << arg << "\n"; break;
+            case Ops::ROT: stream << "ROT " << arg << "\n"; break;
+            case Ops::RROT: stream << "RROT " << arg << "\n"; break;
+            case Ops::BUILDLIST: stream << "BUILDLIST " << arg << "\n"; break;
+            case Ops::UNPACK: stream << "UNPACK " << (arg & 0xFFFF) << " " << (arg >> 16) << "\n"; break;
             default: stream << "UNKNOWN " << static_cast<unsigned int>(op) << " " << arg << "\n"; break;
         }
         pos += 5;

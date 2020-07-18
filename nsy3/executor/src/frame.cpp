@@ -7,6 +7,9 @@
 #include <iostream>
 #include <sstream>
 
+constexpr unsigned int HALF_INT_MAX = 0xFFFF;
+
+int Frame::execution_debug_level = 0;
 TypeRef Frame::type = create<Type>("Frame", Type::basevec{Object::type});
 
 Frame::Frame(TypeRef type, std::shared_ptr<const Code> code, unsigned int offset,
@@ -83,6 +86,13 @@ std::map<std::string, ObjectRef> Frame::execute() const {
     while (position < limit_) {
         auto op = static_cast<Ops>(code[position]);
         auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
+        if (execution_debug_level >= 1) {
+            std::cerr << "S@" << position << std::endl;
+            for (auto& obj : stack) {
+                std::cerr << " - " << obj.second << std::endl;
+            }
+            std::cerr << "SD" << std::endl;
+        }
         position += 5;
         switch (op) {
             case Ops::KWARG: {
@@ -113,27 +123,6 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 position = stack_push(0, func->call(args), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
                 break;
             }
-//             case Ops::SYMREFBINOP: {
-//                 auto left = stack.back().second;
-//                 stack.pop_back();
-//                 auto right = stack.back().second;
-//                 stack.pop_back();
-//                 auto op = convert<std::string>(consts[arg]);
-//                 ObjectRef res;
-//                 try {
-//                     res = left->getattr(op)->call({right});
-//                 }
-//                 catch (const ObjectRef& exc) {
-//                     if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
-//                         res = right->getattr(op)->call({left});
-//                     }
-//                     else {
-//                         throw;
-//                     }
-//                 }
-//                 position = stack_push(0, res, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
-//                 break;
-//             }
             case Ops::BINOP: {
                 auto right = stack.back().second;
                 stack.pop_back();
@@ -208,6 +197,20 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 }
                 break;
             }
+            case Ops::JUMP_IF_KEEP: {
+                auto obj = stack.back().second;
+                if (obj->to_bool()) {
+                    position = arg;
+                }
+                break;
+            }
+            case Ops::JUMP_IFNOT_KEEP: {
+                auto obj = stack.back().second;
+                if (!obj->to_bool()) {
+                    position = arg;
+                }
+                break;
+            }
             case Ops::DROP: {
                 for (auto i = 0u; i < arg; ++i) {
                     stack.pop_back();
@@ -240,6 +243,61 @@ std::map<std::string, ObjectRef> Frame::execute() const {
                 }
                 break;
             }
+            case Ops::ROT: {
+                auto obj = stack.back();
+                stack.pop_back();
+                stack.insert(stack.end() - arg, obj);
+                break;
+            }
+            case Ops::RROT: {
+                auto obj = (stack.end() - arg - 1)->second;
+                stack.erase(stack.end() - arg - 1);
+                stack.emplace_back(std::make_pair(0, obj));
+                break;
+            }
+            case Ops::BUILDLIST: {
+                std::vector<ObjectRef> args;
+                auto pos_iter = stack.end() - arg;
+                for (auto iter = pos_iter; iter != stack.end(); ++iter) {
+                    args.push_back(iter->second);
+                }
+                stack.erase(pos_iter, stack.end());
+                // No stack_push needed since this isn't a thunk
+                stack.emplace_back(std::make_pair(0, create<List>(args)));
+                break;
+            }
+            case Ops::UNPACK: {
+                auto obj = stack.back().second;
+                stack.pop_back();
+                if (!dynamic_cast<const List*>(obj.get())) {
+                    throw std::runtime_error("Conv iter to list");
+                }
+                auto lst = std::dynamic_pointer_cast<const List>(obj);
+                if ((arg >> 16) == HALF_INT_MAX) {
+                    if (lst->get().size() != (arg & HALF_INT_MAX)) {
+                        create<ValueException>("Expected sequence of length '" + std::to_string((arg & HALF_INT_MAX))
+                                               + "', got '" + std::to_string(lst->get().size()) + "'")->raise();
+                    }
+                }
+                else if (lst->get().size() < (arg & HALF_INT_MAX) - 1) {
+                    create<ValueException>("Expected sequence of length '" + std::to_string((arg & HALF_INT_MAX) - 1)
+                                           + "' or greater, got '" + std::to_string(lst->get().size()) + "'")->raise();
+                }
+                auto idx = 0u;
+                for (auto i = 0u; i < (arg & HALF_INT_MAX); ++i) {
+                    if (i == (arg >> 16)) {
+                        std::vector<ObjectRef> subseq(lst->get().begin() + idx, lst->get().end() + (arg >> 16) - (arg & HALF_INT_MAX));
+                        // No stack_push needed since this isn't a thunk
+                        stack.emplace_back(std::make_pair(0, create<List>(subseq)));
+                        idx += subseq.size();
+                    }
+                    else {
+                        // Same as above
+                        stack.emplace_back(std::make_pair(0, lst->get()[idx++]));
+                    }
+                }
+                break;
+            }
             default: {
                 throw std::runtime_error("Unrecognized op");
             }
@@ -252,8 +310,9 @@ ExecutionThunk::ExecutionThunk(TypeRef type, ExecutionEngine* execengine, std::s
 }
 
 void ExecutionThunk::notify(ObjectRef obj) const {
-    if (dynamic_cast<const Thunk*>(obj.get())) {
-        throw std::runtime_error("Notify was a thunk");
+    if (auto thunk = dynamic_cast<const Thunk*>(obj.get())) {
+        thunk->subscribe(std::dynamic_pointer_cast<const Thunk>(shared_from_this()));
+        return;
     }
     auto new_stack = frame->stack_;
     new_stack.push_back(std::make_pair(0, obj));

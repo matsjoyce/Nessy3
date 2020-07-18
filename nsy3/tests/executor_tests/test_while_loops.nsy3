@@ -1,0 +1,45 @@
+print("Assertions: 5")
+
+x = 0
+while x < 10:
+    x += 1
+
+assert x == 10
+
+x = 0
+while x < 10:
+    x += 1
+    if x == 5:
+        break
+
+assert x == 5
+
+x = 0
+while x < 10:
+    x += x
+    if x == 2:
+        continue
+    x += 1
+
+assert x == 11
+
+# Collatz
+
+iter_list = []
+n = 1
+while TRUE:
+    t = n
+    iters = 0
+    while t != 1:
+        if t % 2:
+            t = 3 * t + 1
+        else:
+            t /= 2
+        iters += 1
+    iter_list :+= iters
+    if iters > 100:
+        break
+    n += 1
+
+assert n == 27
+assert iter_list == [0, 1, 7, 2, 5, 8, 16, 3, 19, 6, 14, 9, 9, 17, 17, 4, 12, 20, 20, 7, 7, 15, 15, 10, 23, 10, 111]

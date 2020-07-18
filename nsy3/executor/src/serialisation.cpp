@@ -106,6 +106,15 @@ ObjectRef deserialise_from_file(std::istream& stream) {
             stream.read(reinterpret_cast<char*>(str.data()), len);
             return create<Bytes>(str);
         }
+        case SerialisationType::TRUE: {
+            return Boolean::true_;
+        }
+        case SerialisationType::FALSE: {
+            return Boolean::false_;
+        }
+        case SerialisationType::NONE: {
+            return NoneType::none;
+        }
         default: {
             throw std::runtime_error("Unknown serialisation type" + std::to_string(static_cast<int>(type)));
         }

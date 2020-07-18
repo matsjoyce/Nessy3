@@ -5,7 +5,7 @@ from . import ast, bytecode, serialisation
 from .bytecode import Bytecode
 
 
-RETURN_SKIP = 2 ** 16 - 1
+RETURN_SKIP = HALF_INT_MAX = 2 ** 16 - 1
 
 DOLLAR_GET_FLAGS = {
     "partial": 1
@@ -153,16 +153,14 @@ def compile_expr_iter(a, ctx):
         if a.op == "and":
             end_label = ctx.label()
             yield compile_expr(a.left, ctx)
-            yield Bytecode.DUP(1)
-            yield Bytecode.JUMP_IFNOT(end_label)
+            yield Bytecode.JUMP_IFNOT_KEEP(end_label)
             yield Bytecode.DROP(1)
             yield compile_expr(a.right, ctx)
             yield end_label
         elif a.op == "or":
             end_label = ctx.label()
             yield compile_expr(a.left, ctx)
-            yield Bytecode.DUP(1)
-            yield Bytecode.JUMP_IF(end_label)
+            yield Bytecode.JUMP_IF_KEEP(end_label)
             yield Bytecode.DROP(1)
             yield compile_expr(a.right, ctx)
             yield end_label
@@ -188,15 +186,28 @@ def compile_expr_iter(a, ctx):
     elif isinstance(a, ast.Literal):
         yield ctx.const(a.value)
     elif isinstance(a, ast.SequenceLiteral):
-        if a.type == "{}" and (not a.seq or isinstance(a.seq[0], tuple)):
-            # Dict
-            raise RuntimeError("{} not imp")
-        elif a.type == "{}":
-            # Set
-            raise RuntimeError("{} not imp")
+        if isinstance(a.seq, ast.CompExpr):
+            if a.type == "{}" and isinstance(a.seq.expr, tuple):
+                # Dict
+                yield Bytecode.CALL(Bytecode.GET(ctx.const("Dict", wrap=False)), compile_expr(a.seq, ctx))
+            elif a.type == "{}":
+                # Set
+                yield Bytecode.CALL(Bytecode.GET(ctx.const("Set", wrap=False)), compile_expr(a.seq, ctx))
+            else:
+                # List
+                yield compile_expr(a.seq, ctx)
         else:
-            # List
-            yield Bytecode.CALL(Bytecode.GET(ctx.const(a.type, wrap=False)), *[compile_expr(s, ctx) for s in a.seq])
+            lst = Bytecode.BUILDLIST(len(a.seq), *[compile_expr(s, ctx) for s in a.seq])
+
+            if a.type == "{}" and (not a.seq or isinstance(a.seq[0], tuple)):
+                # Dict
+                yield Bytecode.CALL(Bytecode.GET(ctx.const("Dict", wrap=False)), lst)
+            elif a.type == "{}":
+                # Set
+                yield Bytecode.CALL(Bytecode.GET(ctx.const("Set", wrap=False)), lst)
+            else:
+                # List
+                yield lst
     elif isinstance(a, ast.Name):
         yield Bytecode.GET(ctx.const(a.name, wrap=False))
     elif isinstance(a, ast.DollarName):
@@ -205,7 +216,7 @@ def compile_expr_iter(a, ctx):
             flags |= DOLLAR_GET_FLAGS[flag]
         yield Bytecode.CALL(Bytecode.GET(ctx.const("$?", wrap=False)), Bytecode.CALL(Bytecode.GET(ctx.const("[]", wrap=False)), *[compile_expr(n, ctx) for n in a.name]), ctx.const(flags))
     elif isinstance(a, ast.Func):
-        func_label = ctx.add_function(Bytecode.SEQ(Bytecode.LINENO(a.lineno), *list(compile_stmt(a.stmt, ctx)), Bytecode.RETURN(ctx.const(0))))
+        func_label = ctx.add_function(Bytecode.SEQ(Bytecode.LINENO(a.lineno), *list(compile_stmt(a.stmt, ctx)), Bytecode.RETURN(ctx.const(None))))
         arg_names = []
         defaults = []
         for arg in a.args:
@@ -224,7 +235,41 @@ def compile_expr_iter(a, ctx):
         yield else_label
         yield compile_expr(a.right, ctx)
         yield end_label
-    else:
+    elif isinstance(a, ast.CompExpr):
+        num_loops = len(ctx.loop_stack)
+        code = [
+            Bytecode.LINENO(a.expr.lineno),
+            ctx.const([]),
+            *[compile_expr(t, ctx) for t in a.trailers]
+        ]
+        code.extend([
+            Bytecode.RROT(len(ctx.loop_stack) - num_loops),
+            Bytecode.CALL(Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const(":+")), compile_expr(a.expr, ctx)),
+            Bytecode.ROT(len(ctx.loop_stack) - num_loops),
+        ])
+        while len(ctx.loop_stack) > num_loops:
+            start_label, end_label = ctx.pop_loop()
+            code.append(Bytecode.JUMP(start_label))
+            code.append(end_label)
+            code.append(Bytecode.DROP(1))
+        code.append(Bytecode.RETURN(Bytecode.IGNORE()))
+        func_label = ctx.add_function(Bytecode.SEQ(*code))
+        signature = Bytecode.CALL(Bytecode.GET(ctx.const("Signature", wrap=False)), ctx.const([]), ctx.const([]), ctx.const(0))
+        yield Bytecode.CALL(Bytecode.CALL(Bytecode.GET(ctx.const("->", wrap=False)), Bytecode.GET(ctx.const("__code__", wrap=False)), ctx.const(func_label), signature, Bytecode.GETENV()))
+    elif isinstance(a, ast.CompForExpr):
+        start_label, end_label = ctx.label(), ctx.label()
+        ctx.push_loop(start_label, end_label)
+        yield compile_expr(a.expr, ctx)
+        yield start_label
+        yield Bytecode.CALL(Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const("__iter__")))
+        yield Bytecode.JUMP_IFNOT_KEEP(end_label)
+        yield Bytecode.UNPACK(Combine(2, HALF_INT_MAX))
+        yield Bytecode.SET(ctx.const(a.name, wrap=False), Bytecode.IGNORE())
+    elif isinstance(a, ast.CompIfExpr):
+        yield compile_expr(a.cond, ctx)
+        labels = ctx.current_loop()
+        yield Bytecode.JUMP_IFNOT(labels[0])
+    else: # pragma: no cover
         raise RuntimeError(f"Cannot compile {type(a)} to IR.")
 
 
@@ -296,11 +341,11 @@ def compile_stmt(a, ctx):
         ctx.push_loop(start_label, end_label)
         block_comp = Bytecode.SEQ(*list(compile_stmt(a.block, ctx)))
         # If there is a return statement in the block, the skip must be a return skip to avoid another return statement executing
+        yield start_label
         if any(op.type == Bytecode.RETURN for op in block_comp.linearize()):
             yield ctx.setskip(RETURN_SKIP)
         else:
             yield ctx.setskip(end_label)
-        yield start_label
         yield Bytecode.JUMP_IFNOT(end_label, compile_expr(a.expr, ctx))
         yield from compile_stmt(a.block, ctx)
         yield Bytecode.JUMP(start_label)
@@ -333,12 +378,35 @@ def compile_stmt(a, ctx):
                     yield Bytecode.SET(ctx.const(varname, wrap=False), Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const(modname)))
                     yield skip_label
     elif isinstance(a, ast.ForStmt):
-        return ...
-    else:
+        start_label, end_label = ctx.label(), ctx.label()
+        full_end_label = ctx.label()
+        ctx.push_loop(start_label, end_label)
+        ctx.savestack(1)
+        block_comp = Bytecode.SEQ(*list(compile_stmt(a.block, ctx)))
+        # If there is a return statement in the block, the skip must be a return skip to avoid another return statement executing
+        yield start_label
+        return_inside_block = any(op.type == Bytecode.RETURN for op in block_comp.linearize())
+        inner_setskip = ctx.setskip(RETURN_SKIP if return_inside_block else end_label)
+        ctx.savestack(-1)
+        yield ctx.setskip(RETURN_SKIP if return_inside_block else full_end_label)
+        yield compile_expr(a.expr, ctx)
+        yield start_label
+        yield inner_setskip
+        yield Bytecode.CALL(Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const("__iter__")))
+        yield Bytecode.JUMP_IFNOT_KEEP(end_label)
+        yield Bytecode.UNPACK(Combine(2, HALF_INT_MAX))
+        yield Bytecode.SET(ctx.const(a.name, wrap=False), Bytecode.IGNORE())
+        yield block_comp
+        yield Bytecode.JUMP(start_label)
+        yield end_label
+        yield Bytecode.DROP(1)
+        yield full_end_label
+        ctx.pop_loop()
+    else: # pragma: no cover
         raise RuntimeError(f"Cannot compile {type(a)} to IR.")
 
 
 def compile(a, fname, modname):
     ctx = CompiledCode(fname, modname)
-    ctx.code = Bytecode.SEQ(*list(compile_stmt(a, ctx)), Bytecode.RETURN(ctx.const(0)))
+    ctx.code = Bytecode.SEQ(*list(compile_stmt(a, ctx)), Bytecode.RETURN(ctx.const(None)))
     return ctx

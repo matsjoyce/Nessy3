@@ -36,6 +36,12 @@ public:
     static TypeRef type;
 };
 
+class ValueException : public Exception {
+public:
+    using Exception::Exception;
+    static TypeRef type;
+};
+
 class AssertionException : public Exception {
 public:
     using Exception::Exception;

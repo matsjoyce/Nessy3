@@ -104,6 +104,8 @@ class SequenceLiteral(Expr):
     seq: list # of Expr
 
     def pprint(self):
+        if isinstance(self.seq, CompExpr):
+            return [(0, f"{self.type}: [")] + self.seq.pprint() + [(0, "]")]
         seq = []
         for s in self.seq:
             if seq:
@@ -142,6 +144,32 @@ class IfExpr(Expr):
 
     def pprint(self):
         return [(0, "if")] + indent(self.cond.pprint()) + [(0, "then")] + indent(self.left.pprint()) + [(0, "else")] + indent(self.right.pprint())
+
+
+@dataclasses.dataclass(repr=False)
+class CompForExpr(Expr):
+    name: str
+    expr: Expr
+
+    def pprint(self):
+        return [(0, "for " + self.name + " in")] + self.expr.pprint()
+
+
+@dataclasses.dataclass(repr=False)
+class CompIfExpr(Expr):
+    cond: Expr
+
+    def pprint(self):
+        return [(0, "if")] + self.cond.pprint()
+
+
+@dataclasses.dataclass(repr=False)
+class CompExpr(Expr):
+    expr: Expr
+    trailers: list
+
+    def pprint(self):
+        return self.expr.pprint() + [z for n in self.trailers for z in n.pprint()]
 
 
 class Stmt(ASTNode):

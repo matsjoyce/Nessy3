@@ -55,7 +55,7 @@ ObjectRef convert_to_objref<int>::convert(const int& t) {
 }
 
 ObjectRef convert_to_objref<bool>::convert(const bool& t) {
-    return create<Boolean>(t);
+    return t ? Boolean::true_ : Boolean::false_;
 }
 
 ObjectRef convert_to_objref<double>::convert(const double& t) {
@@ -68,4 +68,8 @@ ObjectRef convert_to_objref<std::string>::convert(const std::string& t) {
 
 ObjectRef convert_to_objref<ObjectRef>::convert(const ObjectRef& t) {
     return t;
+}
+
+ObjectRef convert_to_objref<void>::convert() {
+    return NoneType::none;
 }

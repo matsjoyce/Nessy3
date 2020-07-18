@@ -23,7 +23,7 @@ public:
     static TypeRef type;
     virtual bool to_bool() const;
     virtual std::size_t hash() const;
-    virtual bool eq(ObjectRef other) const;
+    bool eq(ObjectRef other) const;
     TypeRef obj_type() const;
     // TODO: The below doesn't seem quite right. Intuitivly, getattr is a function provided by the type. But this works for now.
     ObjectRef getsuper(TypeRef type, std::string name) const;
@@ -137,6 +137,7 @@ public:
     Boolean(TypeRef type, bool v);
     std::string to_str() const override;
     static TypeRef type;
+    static std::shared_ptr<const Boolean> true_, false_;
 };
 
 class String : public Object {
@@ -147,7 +148,6 @@ public:
     static TypeRef type;
     std::string get() const { return value; }
     std::size_t hash() const override;
-    bool eq(ObjectRef other) const override;
 };
 
 class Bytes : public Object {
@@ -157,6 +157,16 @@ public:
     std::string to_str() const override;
     static TypeRef type;
     std::basic_string<unsigned char> get() const { return value; }
+};
+
+class NoneType : public Object {
+    std::string value;
+    NoneType(TypeRef type);
+public:
+    std::string to_str() const override;
+    static TypeRef type;
+    bool to_bool() const override;
+    static std::shared_ptr<const NoneType> none;
 };
 
 class BoundMethod : public Object {
@@ -207,6 +217,14 @@ public:
     std::string to_str() const override;
     static TypeRef type;
     const std::vector<ObjectRef>& get() const { return value; }
+};
+
+class ListIterator : public Object {
+    std::shared_ptr<const List> list;
+    unsigned int position;
+public:
+    ListIterator(TypeRef type, std::shared_ptr<const List> list, unsigned int position=0);
+    static TypeRef type;
 };
 
 class ExecutionEngine;

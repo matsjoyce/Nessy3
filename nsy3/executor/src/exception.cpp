@@ -18,3 +18,4 @@ TypeRef UnsupportedOperation::type = create<Type>("UnsupportedOperation", Type::
 TypeRef NameException::type = create<Type>("NameException", Type::basevec{Exception::type});
 TypeRef IndexException::type = create<Type>("IndexException", Type::basevec{Exception::type});
 TypeRef AssertionException::type = create<Type>("AssertionException", Type::basevec{Exception::type});
+TypeRef ValueException::type = create<Type>("ValueException", Type::basevec{Exception::type});
