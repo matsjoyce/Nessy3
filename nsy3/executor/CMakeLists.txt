@@ -25,17 +25,32 @@ enable_cxx_compiler_flag_if_supported("-Wextra")
 enable_cxx_compiler_flag_if_supported("-pedantic")
 enable_cxx_compiler_flag_if_supported("-fdiagnostics-color=always")
 
-add_library(libexecutor SHARED
-            src/object.cpp
-            src/bytecode.cpp
-            src/frame.cpp
-            src/serialisation.cpp
-            src/functionutils.cpp
-            src/builtins.cpp
-            src/executionengine.cpp
-            src/exception.cpp
+set(PROJECT_FILES
+        src/object.cpp
+        src/bytecode.cpp
+        src/frame.cpp
+        src/serialisation.cpp
+        src/functionutils.cpp
+        src/builtins.cpp
+        src/executionengine.cpp
+        src/exception.cpp
+        src/main.cpp
 )
-target_link_libraries(libexecutor docopt)
 
-add_executable(executor src/main.cpp)
-target_link_libraries(executor libexecutor)
+add_executable(executor ${PROJECT_FILES})
+target_link_libraries(executor docopt)
+
+add_executable(executor_coverage ${PROJECT_FILES})
+target_compile_definitions(executor_coverage PRIVATE COVERAGE)
+target_compile_options(executor_coverage PRIVATE
+    "-fprofile-arcs"
+    "-ftest-coverage"
+    "-fno-elide-constructors"
+    "-fno-inline"
+    "-O0"
+    "-g"
+    "-fPIC"
+    "-fno-default-inline"
+    "--coverage"
+    "-lgcov")
+target_link_libraries(executor_coverage docopt gcov)

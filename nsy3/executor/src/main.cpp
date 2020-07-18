@@ -8,6 +8,11 @@
 #include "serialisation.hpp"
 #include "frame.hpp"
 
+#ifdef COVERAGE
+    extern "C" {
+        void __gcov_flush();
+    }
+#endif
 
 static const char USAGE[] =
 R"(fs
@@ -73,6 +78,10 @@ int main(int argc, const char** argv) {
             return 1;
         }
     }
+
+#ifdef COVERAGE
+    __gcov_flush();
+#endif
 
     return 0;
 }
