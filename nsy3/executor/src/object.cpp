@@ -633,11 +633,7 @@ TypeRef List::type = create<Type>("List", Type::basevec{Object::type}, Type::att
         return self->value[idx->get()];
     })},
     {"__iter__", create<BuiltinFunction>([](std::shared_ptr<const List> self) -> ObjectRef {
-        if (!self->value.size()) {
-            return NoneType::none;
-        }
-        std::vector<ObjectRef> res = {create<ListIterator>(self, 1), self->value.front()};
-        return create<List>(res);
+        return create<ListIterator>(self, 0);
     })},
     {"==", create<BuiltinFunction>([](const List* self, ObjectRef other) -> BaseObjectRef {
         if (auto other_l = dynamic_cast<const List*>(other.get())) {
@@ -679,7 +675,10 @@ std::string List::to_str() const {
 }
 
 TypeRef ListIterator::type = create<Type>("ListIterator", Type::basevec{Object::type}, Type::attrmap{
-    {"__iter__", create<BuiltinFunction>([](const ListIterator* self) -> ObjectRef {
+    {"__iter__", create<BuiltinFunction>([](ObjectRef self) -> ObjectRef {
+        return self;
+    })},
+    {"__next__", create<BuiltinFunction>([](const ListIterator* self) -> ObjectRef {
         if (self->position >= self->list->get().size() ) {
             return NoneType::none;
         }

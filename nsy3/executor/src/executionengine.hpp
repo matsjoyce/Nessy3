@@ -7,15 +7,18 @@
 class TestThunk;
 class GetThunk;
 class SetThunk;
+class SubThunk;
 
 using DollarName = std::vector<std::string>;
+template<class T, class U> using VecMultiMap = std::map<T, std::vector<U>>;
 
 struct ExecutionState {
     std::vector<std::shared_ptr<const TestThunk>> test_thunks;
-    std::multimap<std::shared_ptr<const Thunk>, std::shared_ptr<const Thunk>> thunk_subscriptions;
+    VecMultiMap<std::shared_ptr<const Thunk>, std::shared_ptr<const Thunk>> thunk_subscriptions;
     std::vector<std::pair<std::shared_ptr<const Thunk>, BaseObjectRef>> thunk_results;
-    std::multimap<DollarName, std::shared_ptr<const GetThunk>> get_thunks;
-    std::multimap<DollarName, std::shared_ptr<const SetThunk>> set_thunks;
+    VecMultiMap<DollarName, std::shared_ptr<const GetThunk>> get_thunks;
+    VecMultiMap<DollarName, std::shared_ptr<const SetThunk>> set_thunks;
+    VecMultiMap<DollarName, std::shared_ptr<const SubThunk>> sub_thunks;
     std::map<DollarName, ObjectRef> dollar_values;
     std::vector<DollarName> resolution_order;
     std::map<DollarName, DollarName> aliases;
@@ -25,13 +28,14 @@ struct ExecutionState {
 class ExecutionEngine {
     std::map<std::string, ObjectRef> env_additions;
     std::map<std::string, ObjectRef> modules;
-    std::multimap<DollarName, DollarName> ordering;
+    VecMultiMap<DollarName, DollarName> ordering;
     ExecutionState state, initial_state;
 
     BaseObjectRef test_thunk(std::string name);
     ObjectRef import_(std::string name);
     BaseObjectRef dollar_get(DollarName name, unsigned int flags);
     BaseObjectRef dollar_set(DollarName, ObjectRef value, unsigned int flags);
+    BaseObjectRef make_sub_thunk(DollarName name, unsigned int position);
     void make_alias(DollarName name, DollarName alias);
 
     void resolve_dollar(DollarName);
@@ -47,34 +51,8 @@ public:
     void subscribe_thunk(std::shared_ptr<const Thunk> source, std::shared_ptr<const Thunk> dest);
     void finalize_thunk(std::shared_ptr<const Thunk> source, BaseObjectRef result);
     DollarName dealias(const DollarName& name);
-};
 
-class TestThunk : public Thunk {
-    std::string name;
-public:
-    TestThunk(ExecutionEngine* execengine, std::string name);
-    std::string to_str() const override;
-};
-
-class GetThunk : public Thunk {
-    DollarName name;
-    unsigned int flags;
-public:
-    GetThunk(ExecutionEngine* execengine, DollarName name, unsigned int flags);
-    std::string to_str() const override;
-
-    friend class ExecutionEngine;
-};
-
-class SetThunk : public Thunk {
-    DollarName name;
-    ObjectRef value;
-    unsigned int flags;
-public:
-    SetThunk(ExecutionEngine* execengine, DollarName name, ObjectRef value, unsigned int flags);
-    std::string to_str() const override;
-
-    friend class ExecutionEngine;
+    friend class SubIter;
 };
 
 #endif // EXECUTIONENGINE_HPP

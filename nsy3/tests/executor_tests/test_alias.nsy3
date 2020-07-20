@@ -19,8 +19,12 @@ if $z:
 
 $z = 1
 
+$char.b = 1
+$C.b += 1
+alias($$char, $$C)
+
 if test_thunk("final"):
-    print("Assertions: 5")
+    print("Assertions: 6")
 
     assert $x == 2
     assert $y == 2
@@ -30,3 +34,5 @@ if test_thunk("final"):
     assert $p == 2
 
     assert $r == 2
+
+    assert $C.b == 2

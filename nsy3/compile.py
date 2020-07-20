@@ -259,9 +259,9 @@ def compile_expr_iter(a, ctx):
     elif isinstance(a, ast.CompForExpr):
         start_label, end_label = ctx.label(), ctx.label()
         ctx.push_loop(start_label, end_label)
-        yield compile_expr(a.expr, ctx)
+        yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.expr, ctx), ctx.const("__iter__")))
         yield start_label
-        yield Bytecode.CALL(Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const("__iter__")))
+        yield Bytecode.CALL(Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const("__next__")))
         yield Bytecode.JUMP_IFNOT_KEEP(end_label)
         yield Bytecode.UNPACK(Combine(2, HALF_INT_MAX))
         yield Bytecode.SET(ctx.const(a.name, wrap=False), Bytecode.IGNORE())
@@ -389,10 +389,10 @@ def compile_stmt(a, ctx):
         inner_setskip = ctx.setskip(RETURN_SKIP if return_inside_block else end_label)
         ctx.savestack(-1)
         yield ctx.setskip(RETURN_SKIP if return_inside_block else full_end_label)
-        yield compile_expr(a.expr, ctx)
+        yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.expr, ctx), ctx.const("__iter__")))
         yield start_label
         yield inner_setskip
-        yield Bytecode.CALL(Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const("__iter__")))
+        yield Bytecode.CALL(Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const("__next__")))
         yield Bytecode.JUMP_IFNOT_KEEP(end_label)
         yield Bytecode.UNPACK(Combine(2, HALF_INT_MAX))
         yield Bytecode.SET(ctx.const(a.name, wrap=False), Bytecode.IGNORE())

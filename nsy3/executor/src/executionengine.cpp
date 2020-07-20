@@ -1,4 +1,5 @@
 #include "executionengine.hpp"
+#include "executionengine_private.hpp"
 #include "functionutils.hpp"
 #include "bytecode.hpp"
 #include "frame.hpp"
@@ -6,15 +7,6 @@
 
 #include <iostream>
 #include <sstream>
-
-enum class DollarGetFlags : unsigned int {
-    PARTIAL = 1 // Can read undecided values
-};
-
-enum class DollarSetFlags : unsigned int {
-    MODIFICATION = 1, // Can set after the initial set
-    DEFAULT = 2 // Only executed if there is no initial set
-};
 
 namespace {
     std::ostream& operator<<(std::ostream& s, const DollarName& v) {
@@ -56,9 +48,16 @@ BaseObjectRef ExecutionEngine::dollar_get(DollarName name, unsigned int flags) {
     }
     std::cerr << "Making get for " << name << std::endl;
     auto thunk = std::make_shared<GetThunk>(this, name, flags);
-    state.get_thunks.insert({name, thunk});
+    state.get_thunks[name].push_back(thunk);
     return thunk;
 }
+
+BaseObjectRef ExecutionEngine::make_sub_thunk(DollarName name, unsigned int position) {
+    auto thunk = std::make_shared<SubThunk>(this, name, position);
+    state.sub_thunks[name].push_back(thunk);
+    return thunk;
+}
+
 
 bool is_prefix_of(const DollarName& pref, const DollarName& name) {
     if (pref.size() > name.size()) {
@@ -76,7 +75,7 @@ BaseObjectRef ExecutionEngine::dollar_set(DollarName name, ObjectRef value, unsi
     std::cerr << "Making set for " << name << std::endl;
     name = dealias(name);
     auto thunk = std::make_shared<SetThunk>(this, name, value, flags);
-    state.set_thunks.insert({name, thunk});
+    state.set_thunks[name].push_back(thunk);
     return thunk;
 }
 
@@ -100,7 +99,7 @@ void ExecutionEngine::make_alias(DollarName name, DollarName alias) {
     for (auto& item : state.dollar_values) {
         if (is_prefix_of(alias, item.first)) {
             // Cause conflict deliberately
-            state.set_thunks.insert({item.first, std::make_shared<SetThunk>(this, item.first, item.second, 0)});
+            state.set_thunks[item.first].push_back(std::make_shared<SetThunk>(this, item.first, item.second, 0));
             return;
         }
     }
@@ -137,7 +136,9 @@ void ExecutionEngine::finish() {
         for (auto iter = state.get_thunks.begin(); iter != state.get_thunks.end();) {
             auto diter = state.dollar_values.find(iter->first);
             if (diter != state.dollar_values.end()) {
-                iter->second->finalize(diter->second);
+                for (auto& thunk : iter->second) {
+                    thunk->finalize(diter->second);
+                }
                 state.get_thunks.erase(iter++);
             }
             else {
@@ -159,13 +160,19 @@ void ExecutionEngine::finish() {
 
 DollarName ExecutionEngine::pick_next_dollar_name() {
     for (auto item : state.set_thunks) {
-        if (item.second->flags & ~static_cast<unsigned int>(DollarSetFlags::DEFAULT)) {
+        bool found_initial = false;
+        for (auto& thunk : item.second) {
+            if (!(thunk->flags & ~static_cast<unsigned int>(DollarSetFlags::DEFAULT))) {
+                found_initial = true;
+                break;
+            }
+        }
+        if (!found_initial) {
             continue;
         }
-        auto before = ordering.equal_range(item.first);
         bool ok = true;
-        for (auto iter = before.first; iter != before.second; ++iter) {
-            if (!state.dollar_values.count(iter->second)) {
+        for (auto& name : ordering[item.first]) {
+            if (!state.dollar_values.count(name)) {
                 ok = false;
                 break;
             }
@@ -182,26 +189,26 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
     ObjectRef value;
 
     {
-        auto iters = state.set_thunks.equal_range(name);
+        auto& thunks = state.set_thunks[name];
         bool has_nondefault_set = false;
-        for (auto iter = iters.first; iter != iters.second;) {
-            if (!iter->second->flags) {
-                std::cerr << "$Exec " << iter->second->to_str() << std::endl;
+        for (auto iter = thunks.begin(); iter != thunks.end();) {
+            if (!(*iter)->flags) {
+                std::cerr << "$Exec " << (*iter)->to_str() << std::endl;
                 if (has_nondefault_set) {
                     throw std::runtime_error("Multiple non-default initial sets");
                 }
-                value = iter->second->value;
-                iter->second->finalize(create<Integer>(1));
-                state.set_thunks.erase(iter++);
+                value = (*iter)->value;
+                (*iter)->finalize(create<Integer>(1));
+                iter = thunks.erase(iter);
                 has_nondefault_set = true;
             }
-            else if (iter->second->flags & static_cast<unsigned int>(DollarSetFlags::DEFAULT)) {
-                std::cerr << "$Exec " << iter->second->to_str() << std::endl;
+            else if ((*iter)->flags & static_cast<unsigned int>(DollarSetFlags::DEFAULT)) {
+                std::cerr << "$Exec " << (*iter)->to_str() << std::endl;
                 if (!has_nondefault_set) {
-                    value = iter->second->value;
+                    value = (*iter)->value;
                 }
-                iter->second->finalize(create<Integer>(1));
-                state.set_thunks.erase(iter++);
+                (*iter)->finalize(create<Integer>(1));
+                iter = thunks.erase(iter);
             }
             else {
                 ++iter;
@@ -212,26 +219,30 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
     {
         while (true) {
             notify_thunks();
-            auto set_iter = state.set_thunks.find(name);
-            if (set_iter != state.set_thunks.end()) {
-                if (!(set_iter->second->flags & static_cast<unsigned int>(DollarSetFlags::MODIFICATION))) {
+            auto& set_thunks = state.set_thunks[name];
+            if (set_thunks.size()) {
+                auto& thunk = set_thunks.front();
+                if (!(thunk->flags & static_cast<unsigned int>(DollarSetFlags::MODIFICATION))) {
                     throw std::runtime_error("Non-modification after initial set");
                 }
-                std::cerr << "$Exec " << set_iter->second->to_str() << std::endl;
-                value = set_iter->second->value;
-                set_iter->second->finalize(create<Integer>(1));
-                state.set_thunks.erase(set_iter);
+                std::cerr << "$Exec " << thunk->to_str() << std::endl;
+                value = thunk->value;
+                thunk->finalize(create<Integer>(1));
+                set_thunks.erase(set_thunks.begin());
                 continue;
             }
             bool found_get = false;
-            auto get_iters = state.get_thunks.equal_range(name);
-            for (auto iter = get_iters.first; iter != get_iters.second; ++iter) {
-                std::cerr << "$Final " << iter->second->to_str() << std::endl;
-                if (iter->second->flags & static_cast<unsigned int>(DollarGetFlags::PARTIAL)) {
-                    iter->second->finalize(value);
-                    state.get_thunks.erase(iter);
+            auto& get_thunks = state.get_thunks[name];
+            for (auto iter = get_thunks.begin(); iter != get_thunks.end();) {
+                std::cerr << "$Final " << (*iter)->to_str() << std::endl;
+                if ((*iter)->flags & static_cast<unsigned int>(DollarGetFlags::PARTIAL)) {
+                    (*iter)->finalize(value);
+                    iter = get_thunks.erase(iter);
                     found_get = true;
                     break;
+                }
+                else {
+                     ++iter;
                 }
             }
             if (found_get) {
@@ -242,12 +253,11 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
     }
     notify_thunks();
     state.dollar_values[name] = value;
-    auto get_iters = state.get_thunks.equal_range(name);
-    for (auto iter = get_iters.first; iter != get_iters.second; ++iter) {
-        std::cerr << "$Final " << iter->second->to_str() << std::endl;
-        iter->second->finalize(value);
+    for (auto& thunk : state.get_thunks[name]) {
+        std::cerr << "$Final " << thunk->to_str() << std::endl;
+        thunk->finalize(value);
     }
-    state.get_thunks.erase(get_iters.first, get_iters.second);
+    state.get_thunks.erase(name);
     notify_thunks();
 }
 
@@ -257,25 +267,35 @@ void ExecutionEngine::notify_thunks() {
         auto [thunk, res] = state.thunk_results.back();
         state.thunk_results.pop_back();
         std::cerr << "finalizing " << thunk->to_str() << std::endl;
-        auto subbed = state.thunk_subscriptions.equal_range(thunk);
-        auto subbed_v = std::vector(subbed.first, subbed.second);
-        state.thunk_subscriptions.erase(subbed.first, subbed.second);
-        for (auto sub : subbed_v) {
-            std::cerr << "  notifying " << sub.second->to_str() << std::endl;
-            sub.second->notify(res);
+        auto subbed = state.thunk_subscriptions[thunk];
+        state.thunk_subscriptions.erase(thunk);
+        for (auto sub : subbed) {
+            std::cerr << "  notifying " << sub->to_str() << std::endl;
+            sub->notify(res);
         }
     }
 }
 
 void ExecutionEngine::check_consistency() {
     for (auto item : state.set_thunks) {
+        if (!item.second.size()) {
+            state.set_thunks.erase(item.first);
+            continue;
+        }
         std::cerr << "Checking " << item.first << std::endl;
         if (state.dollar_values.count(item.first)) {
             std::cerr << "Conflict: " << item.first << " already set, but new set revealed by " << state.resolution_order.back() << std::endl;
-            ordering.insert({item.first, state.resolution_order.back()});
+            ordering[item.first].push_back(state.resolution_order.back());
             state = initial_state;
             std::cerr << "RESET!" << std::endl;
             std::cerr << "Ordering now has " << ordering.size() << " items" << std::endl;
+            for (auto& item : ordering) {
+                std::cerr << "    " << item.first << ": ";
+                for (auto& name : item.second) {
+                    std::cerr << name << ", ";
+                }
+                std::cerr << std::endl;
+            }
         }
     }
 }
@@ -312,7 +332,7 @@ void ExecutionEngine::exec_runspec(ObjectRef runspec) {
 }
 
 void ExecutionEngine::subscribe_thunk(std::shared_ptr<const Thunk> source, std::shared_ptr<const Thunk> dest) {
-    state.thunk_subscriptions.insert({source, dest});
+    state.thunk_subscriptions[source].push_back(dest);
 }
 
 void ExecutionEngine::finalize_thunk(std::shared_ptr<const Thunk> source, BaseObjectRef result) {
@@ -343,5 +363,27 @@ SetThunk::SetThunk(ExecutionEngine* execengine, DollarName name, ObjectRef value
 std::string SetThunk::to_str() const {
     std::stringstream ss;
     ss << "ST(" << name << "=" << value << " @" << flags << ")";
+    return ss.str();
+}
+
+TypeRef SubIter::type = create<Type>("SubIter", Type::basevec{Object::type}, Type::attrmap{
+    {"__iter__", create<BuiltinFunction>([](ObjectRef self) -> ObjectRef {
+        return self;
+    })},
+    {"__next__", create<BuiltinFunction>([](const SubIter* self) -> BaseObjectRef {
+        return self->execengine->make_sub_thunk(self->name, self->position);
+    })}
+});
+
+SubIter::SubIter(TypeRef type, ExecutionEngine* execengine, DollarName name, unsigned int position) : Object(type), execengine(execengine), name(name), position(position) {
+}
+
+SubThunk::SubThunk(ExecutionEngine* execengine, DollarName name, unsigned int position)
+    : Thunk(execengine), name(name), position(position) {
+}
+
+std::string SubThunk::to_str() const {
+    std::stringstream ss;
+    ss << "SubT(" << name << " @" << position << ")";
     return ss.str();
 }
