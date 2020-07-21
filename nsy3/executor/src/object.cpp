@@ -378,7 +378,7 @@ bool Integer::to_bool() const {
     return value;
 }
 
-TypeRef Boolean::type = create<Type>("Boolean", Type::basevec{Numeric::type});
+TypeRef Boolean::type = create<Type>("Boolean", Type::basevec{Integer::type});
 // TODO long winded since I might make the constructor private
 std::shared_ptr<const Boolean> Boolean::true_ = std::shared_ptr<Boolean>(new Boolean(Boolean::type, 1));
 std::shared_ptr<const Boolean> Boolean::false_ = std::shared_ptr<Boolean>(new Boolean(Boolean::type, 0));

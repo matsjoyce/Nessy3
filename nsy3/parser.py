@@ -115,13 +115,8 @@ class NSY2Lexer(Lexer):
         self.lineno += t.value.count("\n")
         return t
 
-    @_(r'[ \t\n]+')
+    @_(r'([ \t\n]|\#.*\n)+')
     def WHITESPACE(self, t):
-        self.lineno += t.value.count("\n")
-        return t
-
-    @_(r'[ \t\n]*\#.*\n[\s\n]*')
-    def ignore_comment(self, t):
         self.lineno += t.value.count("\n")
         return t
 

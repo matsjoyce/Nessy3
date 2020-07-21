@@ -74,6 +74,12 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
     auto position = position_;
     auto env = env_;
     unsigned int skip_position = limit_, skip_save_stack = 0;
+
+
+    if (execution_debug_level >= 1) {
+        std::cerr << "BEGIN EXEC " << position << " - " << limit_ << std::endl;
+    }
+
     while (position < limit_) {
         auto op = static_cast<Ops>(code[position]);
         auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
@@ -317,6 +323,7 @@ ExecutionThunk::ExecutionThunk(ExecutionEngine* execengine, std::shared_ptr<cons
 
 void ExecutionThunk::notify(BaseObjectRef obj) const {
     if (auto thunk = dynamic_cast<const Thunk*>(obj.get())) {
+        std::cerr << "Resubscribe!" << std::endl;
         thunk->subscribe(std::dynamic_pointer_cast<const Thunk>(shared_from_this()));
         return;
     }
@@ -338,7 +345,13 @@ NameExtractThunk::NameExtractThunk(ExecutionEngine* execengine, std::string name
 
 void NameExtractThunk::notify(BaseObjectRef obj) const {
     auto env = std::dynamic_pointer_cast<const Env>(obj);
-    finalize(env->get().at(name));
+    auto iter = env->get().find(name);
+    if (iter != env->get().end()) {
+        finalize(iter->second);
+    }
+    else {
+        finalize(NoneType::none);
+    }
 }
 
 std::string NameExtractThunk::to_str() const {

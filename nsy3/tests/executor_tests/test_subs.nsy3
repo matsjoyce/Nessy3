@@ -1,0 +1,25 @@
+$a.a = 1
+$z.a = 1
+$x.a = 1
+$x.b = 2
+$x.c = 3
+
+p = 0
+for n in subs($$a):
+    p += $a[n]
+
+for n in subs($$z):
+    p += $z[n]
+
+for n in subs($$no_exist):
+    p += $z[n]
+
+$x.d = p
+
+lst = []
+for n in subs($$x):
+    lst :+= [n, $x[n]]
+
+if test_thunk("final"):
+    print("Assertions: 1")
+    assert lst == [["a", 1], ["b", 2], ["c", 3], ["d", 2]]

@@ -26,7 +26,10 @@ ExecutionEngine::ExecutionEngine() {
         {"import", create<BuiltinFunction>(method_and_bind(this, &ExecutionEngine::import_))},
         {"$?", create<BuiltinFunction>(method_and_bind(this, &ExecutionEngine::dollar_get))},
         {"$=", create<BuiltinFunction>(method_and_bind(this, &ExecutionEngine::dollar_set))},
-        {"alias", create<BuiltinFunction>(method_and_bind(this, &ExecutionEngine::make_alias))}
+        {"alias", create<BuiltinFunction>(method_and_bind(this, &ExecutionEngine::make_alias))},
+        {"subs", create<BuiltinFunction>([this](DollarName name) {
+            return create<SubIter>(this, name);
+        })}
     };
 }
 
@@ -123,39 +126,106 @@ DollarName ExecutionEngine::dealias(const DollarName& name) {
 
 void ExecutionEngine::finish() {
     initial_state = state;
-    while (state.thunk_results.size() || state.get_thunks.size() || state.set_thunks.size()) {
+    while (state.get_thunks.size() || state.set_thunks.size() || state.sub_thunks.size()) {
+        bool done_something = false;
         if (state.set_thunks.size()) {
             auto picked_name = pick_next_dollar_name();
+            if (picked_name.size()) {
+                std::cerr << "Resolving " << picked_name << std::endl;
 
-            std::cerr << "Resolving " << picked_name << std::endl;
+                resolve_dollar(picked_name);
 
-            resolve_dollar(picked_name);
-
-            std::cerr << "Done." << std::endl;
-        }
-        for (auto iter = state.get_thunks.begin(); iter != state.get_thunks.end();) {
-            auto diter = state.dollar_values.find(iter->first);
-            if (diter != state.dollar_values.end()) {
-                for (auto& thunk : iter->second) {
-                    thunk->finalize(diter->second);
-                }
-                state.get_thunks.erase(iter++);
-            }
-            else {
-                ++iter;
+                std::cerr << "Done." << std::endl;
+                done_something = true;
             }
         }
+        // Lack of short-circuiting is deliberate!
+        done_something |= finalize_abandoned_get_thunks();
+        done_something |= finalize_abandoned_sub_thunks();
         notify_thunks();
         check_consistency();
+        if (!done_something) {
+            auto dummy_name = pick_dummy_name();
+            resolve_dummy(dummy_name);
+        }
     }
-    while (state.test_thunks.size() || state.thunk_results.size()) {
+    while (state.test_thunks.size()) {
         while (state.test_thunks.size()) {
             auto tt = state.test_thunks.back();
+            std::cerr << "Resolving " << tt->to_str() << std::endl;
             state.test_thunks.pop_back();
             tt->finalize(create<Integer>(1));
         }
         notify_thunks();
     }
+}
+
+bool ExecutionEngine::finalize_abandoned_get_thunks() {
+    bool done_something = false;
+    for (auto iter = state.get_thunks.begin(); iter != state.get_thunks.end();) {
+        auto diter = state.dollar_values.find(iter->first);
+        if (diter != state.dollar_values.end()) {
+            for (auto& thunk : iter->second) {
+                thunk->finalize(diter->second);
+            }
+            state.get_thunks.erase(iter++);
+            done_something = true;
+        }
+        else {
+            ++iter;
+        }
+    }
+    return done_something;
+}
+
+bool ExecutionEngine::finalize_abandoned_sub_thunks() {
+    bool done_something = false;
+    for (auto iter = state.sub_thunks.begin(); iter != state.sub_thunks.end();) {
+        bool resolved = state.dollar_values.find(iter->first) != state.dollar_values.end();
+        auto sub_names_iter = state.sub_names.find(iter->first);
+        if (sub_names_iter == state.sub_names.end()) {
+            if (resolved) {
+                // No more coming
+                for (auto& thunk : iter->second) {
+                    thunk->finalize(NoneType::none);
+                }
+                state.sub_thunks.erase(iter++);
+                done_something = true;
+            }
+            else {
+                    // Maybe more, leave it
+                ++iter;
+            }
+        }
+        else {
+            for (auto thunk_iter = iter->second.begin(); thunk_iter != iter->second.end();) {
+                if (sub_names_iter->second.size() > (*thunk_iter)->position) {
+                    // Got some more
+                    (*thunk_iter)->handle(sub_names_iter->second[(*thunk_iter)->position]);
+                    thunk_iter = iter->second.erase(thunk_iter);
+                    done_something = true;
+                }
+                else if (resolved) {
+                    // No more coming
+                    (*thunk_iter)->finalize(NoneType::none);
+                    thunk_iter = iter->second.erase(thunk_iter);
+                    done_something = true;
+                }
+                else {
+                    // Maybe more, leave it
+                    ++thunk_iter;
+                }
+            }
+            // Clean up empty vectors
+            if (iter->second.size()) {
+                ++iter;
+            }
+            else {
+                state.sub_thunks.erase(iter++);
+            }
+        }
+    }
+    return done_something;
 }
 
 DollarName ExecutionEngine::pick_next_dollar_name() {
@@ -181,7 +251,63 @@ DollarName ExecutionEngine::pick_next_dollar_name() {
             return item.first;
         }
     }
-    throw std::runtime_error("Cannot find next dollar name");
+    return {};
+}
+
+DollarName ExecutionEngine::pick_dummy_name() {
+    std::vector<DollarName> to_check;
+    for (auto& item : state.set_thunks) {
+        to_check.push_back(item.first);
+    }
+    for (auto& item : state.sub_thunks) {
+        to_check.push_back(item.first);
+        std::cerr << "DN " << item.first << std::endl;
+    }
+    while (to_check.size()) {
+        auto check = std::move(to_check.back());
+        to_check.pop_back();
+        bool ok = state.set_thunks.find(check) == state.set_thunks.end();
+        if (ok) {
+            for (auto& name : ordering[check]) {
+                if (!state.dollar_values.count(name)) {
+                    ok = false;
+                    to_check.push_back(name);
+                }
+            }
+        }
+        if (ok) {
+            return check;
+        }
+    }
+    std::cerr << "Cannot make progress!" << std::endl;
+    {
+        std::vector<DollarName> to_check;
+        for (auto& item : state.set_thunks) {
+            to_check.push_back(item.first);
+        }
+        for (auto& item : state.sub_thunks) {
+            to_check.push_back(item.first);
+        }
+        while (to_check.size()) {
+            auto check = std::move(to_check.back());
+            to_check.pop_back();
+            std::cerr << check << ": ";
+            if (state.set_thunks.find(check) == state.set_thunks.end()) {
+                std::cerr << "Has no sets; ";
+            }
+            else {
+                std::cerr << "Has sets; ";
+            }
+            for (auto& name : ordering[check]) {
+                if (!state.dollar_values.count(name)) {
+                    std::cerr << "Waiting for " << name << ";";
+                    to_check.push_back(name);
+                }
+            }
+            std::cerr << std::endl;
+        }
+    }
+    throw std::runtime_error("Cannot make progress!");
 }
 
 void ExecutionEngine::resolve_dollar(DollarName name) {
@@ -253,50 +379,104 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
     }
     notify_thunks();
     state.dollar_values[name] = value;
+    DollarName parent = {name[0]};
+    for (auto iter = ++name.begin(); iter != name.end(); ++iter) {
+        auto& pnames = state.sub_names[parent];
+        auto siter = std::find(pnames.begin(), pnames.end(), *iter);
+        if (siter == pnames.end()) {
+            pnames.push_back(*iter);
+            auto sub_thunk_iter = state.sub_thunks.find(parent);
+            if (sub_thunk_iter == state.sub_thunks.end()) {
+                continue;
+            }
+            for (auto& thunk : sub_thunk_iter->second) {
+                thunk->handle(*iter);
+            }
+        }
+    }
+
     for (auto& thunk : state.get_thunks[name]) {
         std::cerr << "$Final " << thunk->to_str() << std::endl;
         thunk->finalize(value);
     }
     state.get_thunks.erase(name);
+    state.set_thunks.erase(name);
     notify_thunks();
+}
+
+void ExecutionEngine::resolve_dummy(DollarName name) {
+    std::cerr << "Dummy resolving " << name << std::endl;
+    state.resolution_order.push_back(name);
+    state.dollar_values[name] = {};
 }
 
 void ExecutionEngine::notify_thunks() {
     // WARNING: Thunk lists are in flux during calls to notify!
-    while (state.thunk_results.size()) {
-        auto [thunk, res] = state.thunk_results.back();
-        state.thunk_results.pop_back();
-        std::cerr << "finalizing " << thunk->to_str() << std::endl;
-        auto subbed = state.thunk_subscriptions[thunk];
-        state.thunk_subscriptions.erase(thunk);
-        for (auto sub : subbed) {
-            std::cerr << "  notifying " << sub->to_str() << std::endl;
-            sub->notify(res);
+
+    while (state.thunk_subscriptions.size()) {
+        bool done = true;
+        for (auto iter = state.thunk_subscriptions.begin(); iter != state.thunk_subscriptions.end();) {
+            auto result_iter = state.thunk_results.find(iter->first);
+            if (result_iter != state.thunk_results.end()) {
+                auto thunks = std::move(iter->second);
+                state.thunk_subscriptions.erase(iter++);
+                for (auto thunk : thunks) {
+                    std::cerr << "  notifying " << thunk->to_str() << std::endl;
+                    thunk->notify(result_iter->second);
+                }
+                done = false;
+            }
+            else {
+                ++iter;
+            }
+        }
+        if (done) {
+            break;
         }
     }
 }
 
 void ExecutionEngine::check_consistency() {
+    for (auto item : state.get_thunks) {
+        if (!item.second.size()) {
+            throw std::runtime_error("Empty get on the queue");
+        }
+    }
+    for (auto item : state.sub_thunks) {
+        if (!item.second.size()) {
+            throw std::runtime_error("Empty sub on the queue");
+        }
+    }
+    bool conflict = false;
     for (auto item : state.set_thunks) {
         if (!item.second.size()) {
-            state.set_thunks.erase(item.first);
-            continue;
+            throw std::runtime_error("Empty set on the queue");
         }
         std::cerr << "Checking " << item.first << std::endl;
         if (state.dollar_values.count(item.first)) {
             std::cerr << "Conflict: " << item.first << " already set, but new set revealed by " << state.resolution_order.back() << std::endl;
             ordering[item.first].push_back(state.resolution_order.back());
-            state = initial_state;
-            std::cerr << "RESET!" << std::endl;
-            std::cerr << "Ordering now has " << ordering.size() << " items" << std::endl;
-            for (auto& item : ordering) {
-                std::cerr << "    " << item.first << ": ";
-                for (auto& name : item.second) {
-                    std::cerr << name << ", ";
-                }
-                std::cerr << std::endl;
-            }
+            conflict = true;
         }
+        DollarName parent(item.first.begin(), --item.first.end());
+        if (parent.size() && state.dollar_values.count(parent)) {
+            std::cerr << "Conflict: " << parent << " already (dummy) set, but new child " << item.first << " revealed by " << state.resolution_order.back() << std::endl;
+            ordering[parent].push_back(state.resolution_order.back());
+            conflict = true;
+        }
+    }
+    if (!conflict) {
+        return;
+    }
+    state = initial_state;
+    std::cerr << "RESET!" << std::endl;
+    std::cerr << "Ordering now has " << ordering.size() << " items" << std::endl;
+    for (auto& item : ordering) {
+        std::cerr << "    " << item.first << ": ";
+        for (auto& name : item.second) {
+            std::cerr << name << ", ";
+        }
+        std::cerr << std::endl;
     }
 }
 
@@ -336,7 +516,7 @@ void ExecutionEngine::subscribe_thunk(std::shared_ptr<const Thunk> source, std::
 }
 
 void ExecutionEngine::finalize_thunk(std::shared_ptr<const Thunk> source, BaseObjectRef result) {
-    state.thunk_results.push_back({source, result});
+    state.thunk_results[source] = result;
 }
 
 TestThunk::TestThunk(ExecutionEngine* execengine, std::string name) : Thunk(execengine), name(name) {
@@ -386,4 +566,10 @@ std::string SubThunk::to_str() const {
     std::stringstream ss;
     ss << "SubT(" << name << " @" << position << ")";
     return ss.str();
+}
+
+void SubThunk::handle(std::string name) const {
+    auto iter = create<SubIter>(execution_engine(), this->name, position + 1);
+    auto obj = create<String>(name);
+    finalize(create<List>(std::vector<ObjectRef>{iter, obj}));
 }

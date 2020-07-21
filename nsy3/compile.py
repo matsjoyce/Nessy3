@@ -388,12 +388,14 @@ def compile_stmt(a, ctx):
         return_inside_block = any(op.type == Bytecode.RETURN for op in block_comp.linearize())
         inner_setskip = ctx.setskip(RETURN_SKIP if return_inside_block else end_label)
         ctx.savestack(-1)
-        yield ctx.setskip(RETURN_SKIP if return_inside_block else full_end_label)
+        outer_setskip = ctx.setskip(RETURN_SKIP if return_inside_block else full_end_label)
+        yield outer_setskip
         yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.expr, ctx), ctx.const("__iter__")))
         yield start_label
-        yield inner_setskip
+        yield outer_setskip
         yield Bytecode.CALL(Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const("__next__")))
         yield Bytecode.JUMP_IFNOT_KEEP(end_label)
+        yield inner_setskip
         yield Bytecode.UNPACK(Combine(2, HALF_INT_MAX))
         yield Bytecode.SET(ctx.const(a.name, wrap=False), Bytecode.IGNORE())
         yield block_comp

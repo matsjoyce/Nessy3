@@ -55,6 +55,7 @@ class SubThunk : public Thunk {
 public:
     SubThunk(ExecutionEngine* execengine, DollarName name, unsigned int position);
     std::string to_str() const override;
+    void handle(std::string sub) const;
 
     friend class ExecutionEngine;
 };
