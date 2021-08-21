@@ -1,6 +1,7 @@
 """
 Usage:
-    nsy3 <fname> [--noexec] [--runspec=<rsfile>]
+    nsy3 single <fname> [--noexec] [--runspec=<rsfile>]
+    nsy3 full <dir> [--noexec] [--runspec=<rsfile>]
 """
 
 import pathlib
@@ -13,13 +14,21 @@ EXECUTOR = pathlib.Path(__file__).parent / "executor/build/executor"
 
 args = docopt.docopt(__doc__)
 
-fname = pathlib.Path(args["<fname>"])
+if args["single"]:
+    f = pathlib.Path(args["<fname>"]).resolve()
+    runspec = execution.Runspec([f.parent])
+    runspec.add_fname(f)
+else:
+    f = pathlib.Path(args["<dir>"]).resolve()
+    runspec = execution.Runspec([f])
+    for fname in f.glob("**/*.nsy3"):
+        runspec.add_fname(fname)
 
 if args["--noexec"]:
-    execution.compile_file(fname)
+    pass
 elif args["--runspec"]:
     with open(args["--runspec"], "wb") as f:
-        f.write(execution.prepare_runspec(fname))
+        f.write(runspec.to_bytes())
 else:
-    print("Running executor...")
-    execution.execute_file(fname)
+    print("Running executor on", runspec)
+    print(runspec.execute(return_dvs=True))

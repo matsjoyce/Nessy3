@@ -8,53 +8,6 @@ enum class SerialisationType : char {
     INT, FLOAT, STRING, DICT, SET, LIST, BYTES, TRUE, FALSE, NONE
 };
 
-std::pair<ObjectRef, unsigned int> deserialise(std::basic_string<unsigned char> bytes, unsigned int pos) {
-    auto type = static_cast<SerialisationType>(bytes[pos]);
-    switch (type) {
-        case SerialisationType::INT: {
-            return {create<Integer>(*reinterpret_cast<int*>(bytes.data() + pos + 1)), pos + 5};
-        }
-        case SerialisationType::FLOAT: {
-            return {create<Float>(*reinterpret_cast<double*>(bytes.data() + pos + 1)), pos + 9};
-        }
-        case SerialisationType::STRING: {
-            auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
-            auto str = std::string(reinterpret_cast<char*>(bytes.data() + pos + 5), len);
-            return {create<String>(str), pos + 5 + len};
-        }
-        case SerialisationType::LIST: {
-            auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
-            std::vector<ObjectRef> objs;
-            pos += 5;
-            for (auto i = 0u; i < len; ++i) {
-                auto [obj, new_pos] = deserialise(bytes, pos);
-                objs.push_back(obj);
-                pos = new_pos;
-            }
-            return {create<List>(objs), pos};
-        }
-        case SerialisationType::DICT: {
-            auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
-            ObjectRefMap objs;
-            pos += 5;
-            for (auto i = 0u; i < len; ++i) {
-                auto [key, new_pos] = deserialise(bytes, pos);
-                auto [value, new_pos2] = deserialise(bytes, new_pos);
-                objs[key] = value;
-                pos = new_pos2;
-            }
-            return {create<Dict>(objs), pos};
-        }
-        case SerialisationType::BYTES: {
-            auto len = *reinterpret_cast<unsigned int*>(bytes.data() + pos + 1);
-            return {create<Bytes>(bytes.substr(pos + 5, len)), pos + 5 + len};
-        }
-        default: {
-            throw std::runtime_error("Unknown serialisation type");
-        }
-    }
-}
-
 ObjectRef deserialise_from_file(std::istream& stream) {
     auto type = static_cast<SerialisationType>(stream.get());
     switch (type) {
@@ -118,5 +71,56 @@ ObjectRef deserialise_from_file(std::istream& stream) {
         default: {
             throw std::runtime_error("Unknown serialisation type" + std::to_string(static_cast<int>(type)));
         }
+    }
+}
+
+void serialize_to_file(std::ostream& stream, ObjectRef obj) {
+    if (auto ptr = dynamic_cast<const Integer*>(obj.get())) {
+        stream << static_cast<char>(SerialisationType::INT);
+        auto v = ptr->get();
+        stream.write(reinterpret_cast<const char*>(&v), 4);
+    }
+    else if (auto ptr = dynamic_cast<const Float*>(obj.get())) {
+        stream << static_cast<char>(SerialisationType::FLOAT);
+        auto v = ptr->get();
+        stream.write(reinterpret_cast<const char*>(&v), 8);
+    }
+    else if (auto ptr = dynamic_cast<const String*>(obj.get())) {
+        stream << static_cast<char>(SerialisationType::STRING);
+        auto v = ptr->get().size();
+        stream.write(reinterpret_cast<const char*>(&v), 4);
+        stream << ptr->get();
+    }
+    else if (auto ptr = dynamic_cast<const Bytes*>(obj.get())) {
+        stream << static_cast<char>(SerialisationType::BYTES);
+        auto v = ptr->get().size();
+        stream.write(reinterpret_cast<const char*>(&v), 4);
+        stream.write(reinterpret_cast<const char*>(ptr->get().data()), v);
+    }
+    else if (auto ptr = dynamic_cast<const List*>(obj.get())) {
+        stream << static_cast<char>(SerialisationType::LIST);
+        auto v = ptr->get().size();
+        stream.write(reinterpret_cast<const char*>(&v), 4);
+        for (auto& item : ptr->get()) {
+            serialize_to_file(stream, item);
+        }
+    }
+    else if (auto ptr = dynamic_cast<const Dict*>(obj.get())) {
+        stream << static_cast<char>(SerialisationType::DICT);
+        auto v = ptr->get().size();
+        stream.write(reinterpret_cast<const char*>(&v), 4);
+        for (auto& item : ptr->get()) {
+            serialize_to_file(stream, item.first);
+            serialize_to_file(stream, item.second);
+        }
+    }
+    else if (auto ptr = dynamic_cast<const NoneType*>(obj.get())) {
+        stream << static_cast<char>(SerialisationType::NONE);
+    }
+    else if (auto ptr = dynamic_cast<const Boolean*>(obj.get())) {
+        stream << static_cast<char>(ptr->get() ? SerialisationType::TRUE : SerialisationType::FALSE);
+    }
+    else {
+        throw std::runtime_error("Unknown serialisation type");
     }
 }

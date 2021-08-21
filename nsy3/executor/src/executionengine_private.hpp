@@ -60,4 +60,10 @@ public:
     friend class ExecutionEngine;
 };
 
+class ModuleThunk : public Thunk {
+    std::string name;
+public:
+    ModuleThunk(ExecutionEngine* execengine, std::string name);
+};
+
 #endif // EXECUTIONENGINE_PRIVATE_HPP

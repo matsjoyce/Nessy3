@@ -6,7 +6,7 @@
 
 #include "object.hpp"
 
-std::pair<ObjectRef, unsigned int> deserialise(std::basic_string<unsigned char> bytes, unsigned int pos);
 ObjectRef deserialise_from_file(std::istream& stream);
+void serialize_to_file(std::ostream& stream, ObjectRef obj);
 
 #endif // SERIALISATION_HPP

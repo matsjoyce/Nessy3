@@ -57,15 +57,15 @@ class BCode:
             arg = self.arg_v.pos if isinstance(self.arg_v, BCode) else int(self.arg_v)
         else:
             arg = 0
-        print(self.type, arg)
+        #print(self.type, arg)
         return [z for x in self.subs_v for z in x.to_bytes()] + ([self.BYTES_PATTERN.pack(self.type.id, arg)] if self.type.emit else [])
 
     def size(self):
         return 5
 
     def resolve_labels(self, start=0):
-        if self.type is Bytecode.LABEL:
-            print("L",self.arg_v)
+        #if self.type is Bytecode.LABEL:
+            #print("L",self.arg_v)
         for sub in self.subs_v:
             start = sub.resolve_labels(start)
         self.pos = start

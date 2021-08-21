@@ -4,6 +4,7 @@
 #include "bytecode.hpp"
 #include "frame.hpp"
 #include "builtins.hpp"
+#include "serialisation.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -33,7 +34,7 @@ ExecutionEngine::ExecutionEngine() {
     };
 }
 
-ObjectRef ExecutionEngine::import_(std::string name) {
+BaseObjectRef ExecutionEngine::import_(std::string name) {
     return modules.at(name);
 }
 
@@ -158,6 +159,24 @@ void ExecutionEngine::finish() {
         }
         notify_thunks();
     }
+
+    std::cerr << "Finished!" << std::endl;
+    for (auto& dn : state.dollar_values) {
+        std::cerr << dn.first << " = " << dn.second << std::endl;
+    }
+    std::cerr << "Resolved in " << resets << " resets" << std::endl;
+    std::cout << "=== MARKER ===" << std::endl;
+    ObjectRefMap m;
+    for (auto& dn : state.dollar_values) {
+        if (!dn.second) {
+            continue;
+        }
+        std::stringstream ss;
+        ss << dn.first;
+        m[create<String>(ss.str())] = dn.second;
+    }
+    serialize_to_file(std::cout, create<Dict>(m));
+    std::cout << "=== END MARKER ===" << std::endl;
 }
 
 bool ExecutionEngine::finalize_abandoned_get_thunks() {
@@ -306,13 +325,45 @@ DollarName ExecutionEngine::pick_dummy_name() {
             }
             std::cerr << std::endl;
         }
+        for (auto& item : state.get_thunks) {
+            std::cerr << "Get(s) for " << item.first << std::endl;
+        }
     }
+    for (auto& dn : state.dollar_values) {
+        std::cerr << dn.first << " = " << dn.second << std::endl;
+    }
+    std::cerr << "Took " << resets << " resets" << std::endl;
     throw std::runtime_error("Cannot make progress!");
 }
 
 void ExecutionEngine::resolve_dollar(DollarName name) {
     state.resolution_order.push_back(name);
     ObjectRef value;
+
+    DollarName parent = {name[0]};
+    for (auto iter = ++name.begin(); iter != name.end(); ++iter) {
+        auto& pnames = state.sub_names[parent];
+        auto siter = std::find(pnames.begin(), pnames.end(), *iter);
+        if (siter == pnames.end()) {
+            pnames.push_back(*iter);
+            auto sub_thunk_iter = state.sub_thunks.find(parent);
+            if (sub_thunk_iter != state.sub_thunks.end()) {
+                for (auto thunk_iter = sub_thunk_iter->second.begin(); thunk_iter != sub_thunk_iter->second.end();) {
+                    if ((*thunk_iter)->position == pnames.size() - 1) {
+                        (*thunk_iter)->handle(*iter);
+                        thunk_iter = sub_thunk_iter->second.erase(thunk_iter);
+                    }
+                    else {
+                        ++thunk_iter;
+                    }
+                }
+                if (!sub_thunk_iter->second.size()) {
+                    state.sub_thunks.erase(sub_thunk_iter);
+                }
+            }
+        }
+        parent.push_back(*iter);
+    }
 
     {
         auto& thunks = state.set_thunks[name];
@@ -344,6 +395,7 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
 
     {
         while (true) {
+            std::cerr << "RML" << std::endl;
             notify_thunks();
             auto& set_thunks = state.set_thunks[name];
             if (set_thunks.size()) {
@@ -353,7 +405,7 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
                 }
                 std::cerr << "$Exec " << thunk->to_str() << std::endl;
                 value = thunk->value;
-                thunk->finalize(create<Integer>(1));
+                thunk->finalize(NoneType::none);
                 set_thunks.erase(set_thunks.begin());
                 continue;
             }
@@ -371,29 +423,15 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
                      ++iter;
                 }
             }
-            if (found_get) {
+            if (found_get || state.set_thunks[name].size()) {
                 continue;
             }
             break;
         }
     }
+    std::cerr << "RMLe" << std::endl;
     notify_thunks();
     state.dollar_values[name] = value;
-    DollarName parent = {name[0]};
-    for (auto iter = ++name.begin(); iter != name.end(); ++iter) {
-        auto& pnames = state.sub_names[parent];
-        auto siter = std::find(pnames.begin(), pnames.end(), *iter);
-        if (siter == pnames.end()) {
-            pnames.push_back(*iter);
-            auto sub_thunk_iter = state.sub_thunks.find(parent);
-            if (sub_thunk_iter == state.sub_thunks.end()) {
-                continue;
-            }
-            for (auto& thunk : sub_thunk_iter->second) {
-                thunk->handle(*iter);
-            }
-        }
-    }
 
     for (auto& thunk : state.get_thunks[name]) {
         std::cerr << "$Final " << thunk->to_str() << std::endl;
@@ -452,9 +490,12 @@ void ExecutionEngine::check_consistency() {
         if (!item.second.size()) {
             throw std::runtime_error("Empty set on the queue");
         }
-        std::cerr << "Checking " << item.first << std::endl;
+//         std::cerr << "Checking " << item.first << std::endl;
         if (state.dollar_values.count(item.first)) {
             std::cerr << "Conflict: " << item.first << " already set, but new set revealed by " << state.resolution_order.back() << std::endl;
+            if (state.resolution_order.back() == item.first) {
+                throw std::runtime_error("Circular self dependency");
+            }
             ordering[item.first].push_back(state.resolution_order.back());
             conflict = true;
         }
@@ -469,6 +510,7 @@ void ExecutionEngine::check_consistency() {
         return;
     }
     state = initial_state;
+    ++resets;
     std::cerr << "RESET!" << std::endl;
     std::cerr << "Ordering now has " << ordering.size() << " items" << std::endl;
     for (auto& item : ordering) {
@@ -480,9 +522,8 @@ void ExecutionEngine::check_consistency() {
     }
 }
 
-void ExecutionEngine::exec_file(std::string fname) {
-    auto c = Code::from_file(fname);
-    c->print(std::cerr);
+void ExecutionEngine::exec_code(std::shared_ptr<const Code> code) {
+    code->print(std::cerr);
     std::map<std::string, BaseObjectRef> start_env;
     for (auto& item : builtins) {
         start_env[item.first] = item.second;
@@ -490,23 +531,30 @@ void ExecutionEngine::exec_file(std::string fname) {
     for (auto& item : env_additions) {
         start_env[item.first] = item.second;
     }
-    std::cerr << "Executing " << fname << std::endl;
-    auto frame = create<Frame>(c, 0, start_env);
+    std::cerr << "Executing " << code->filename() << std::endl;
+    auto frame = create<Frame>(code, 0, start_env);
     auto end_env = frame->execute();
-    for (auto& mod : modules) {
-        // Startswith
-        if (mod.first.rfind(c->modulename() + ".", 0) == 0 && mod.first.rfind(".") == c->modulename().size()) {
-            end_env[mod.first.substr(mod.first.rfind(".") + 1)] = mod.second;
-        }
+    auto module = create<Module>(code->modulename(), end_env);
+    auto thunk_iter = modules.find(code->modulename());
+    if (thunk_iter != modules.end()) {
+        std::dynamic_pointer_cast<const ModuleThunk>(thunk_iter->second)->finalize(module);
     }
-    auto module = create<Module>(c->modulename(), end_env);
-    modules[c->modulename()] = module;
+    modules[code->modulename()] = module;
 }
 
 void ExecutionEngine::exec_runspec(ObjectRef runspec) {
     auto runspec_dict = convert_ptr<Dict>(runspec);
+
+    for (auto module_ : convert<std::vector<std::string>>(runspec_dict->get().at(create<String>("modules")))) {
+        modules[module_] = std::make_shared<ModuleThunk>(this, module_);
+    }
     for (auto item : convert_ptr<List>(runspec_dict->get().at(create<String>("files")))->get()) {
-        exec_file(convert<std::string>(item));
+        exec_code(Code::from_file(convert<std::string>(item)));
+    }
+    auto conclusion = runspec_dict->get().at(create<String>("conclusion"));
+    if (conclusion != NoneType::none) {
+        auto bytes = std::dynamic_pointer_cast<const Bytes>(conclusion)->get();
+        exec_code(Code::from_string(std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size())));
     }
     std::cerr << "Initial execution done" << std::endl;
 }
@@ -572,4 +620,7 @@ void SubThunk::handle(std::string name) const {
     auto iter = create<SubIter>(execution_engine(), this->name, position + 1);
     auto obj = create<String>(name);
     finalize(create<List>(std::vector<ObjectRef>{iter, obj}));
+}
+
+ModuleThunk::ModuleThunk(ExecutionEngine* execengine, std::string name) : Thunk(execengine), name(name) {
 }

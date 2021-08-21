@@ -24,6 +24,13 @@ std::shared_ptr<const Code> Code::from_file(std::string fname) {
     return create<Code>(header, body);
 }
 
+std::shared_ptr<const Code> Code::from_string(std::string code) {
+    std::stringstream f(code);
+    auto header = deserialise_from_file(f);
+    auto body = deserialise_from_file(f);
+    return create<Code>(header, body);
+}
+
 Code::Code(TypeRef type, ObjectRef header, ObjectRef body) : Object(type) {
     auto header_map = convert<std::map<std::string, ObjectRef>>(header);
     auto body_map = convert<std::map<std::string, ObjectRef>>(body);

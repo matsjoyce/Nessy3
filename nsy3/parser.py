@@ -305,13 +305,9 @@ class NSY2Parser(Parser):
     def stmt(self, p):
         return ast.AssignStmt(p, p.NAME, ast.Func(p, p.defargs, p.block))
 
-    @_("IMPORT modname")
+    @_("IMPORT dotsmodname AS NAME")
     def stmt(self, p):
-        return ast.ImportStmt(p, p.modname, None)
-
-    @_("IMPORT modname AS NAME")
-    def stmt(self, p):
-        return ast.ImportStmt(p, p.modname, [("_", p.NAME)])
+        return ast.ImportStmt(p, p.dotsmodname, [("*", p.NAME)])
 
     @_("FROM dotsmodname IMPORT modfromnames")
     def stmt(self, p):
@@ -324,6 +320,10 @@ class NSY2Parser(Parser):
     @_("NAME AS NAME")
     def modfromname(self, p):
         return (p.NAME0, p.NAME1)
+
+    @_("STAR AS NAME")
+    def modfromname(self, p):
+        return ("*", p.NAME)
 
     @_("modfromname")
     def modfromnames(self, p):
@@ -340,6 +340,10 @@ class NSY2Parser(Parser):
     @_("dots DOT")
     def dots(self, p):
         return p.dots + ["."]
+
+    @_("dots")
+    def dotsmodname(self, p):
+        return p.dots
 
     @_("dots modname")
     def dotsmodname(self, p):
@@ -455,7 +459,9 @@ class NSY2Parser(Parser):
         "DOLLER multipartname STAREQ expr",
         "DOLLER multipartname SLASHEQ expr",
         "DOLLER multipartname SLASHSLASHEQ expr",
+        "DOLLER multipartname PERCENTEQ expr",
         "DOLLER multipartname STARSTAREQ expr",
+        "DOLLER multipartname COLONPLUSEQ expr",
     )
     def simple_stmt(self, p):
         old_value = ast.DollarName(p, p.multipartname, ["partial"])

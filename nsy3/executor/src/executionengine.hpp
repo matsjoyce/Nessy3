@@ -3,6 +3,7 @@
 
 #include "object.hpp"
 #include "thunk.hpp"
+#include "bytecode.hpp"
 
 class TestThunk;
 class GetThunk;
@@ -28,12 +29,13 @@ struct ExecutionState {
 
 class ExecutionEngine {
     std::map<std::string, ObjectRef> env_additions;
-    std::map<std::string, ObjectRef> modules;
+    std::map<std::string, BaseObjectRef> modules;
     VecMultiMap<DollarName, DollarName> ordering;
     ExecutionState state, initial_state;
+    unsigned int resets = 0;
 
     BaseObjectRef test_thunk(std::string name);
-    ObjectRef import_(std::string name);
+    BaseObjectRef import_(std::string name);
     BaseObjectRef dollar_get(DollarName name, unsigned int flags);
     BaseObjectRef dollar_set(DollarName, ObjectRef value, unsigned int flags);
     BaseObjectRef make_sub_thunk(DollarName name, unsigned int position);
@@ -51,7 +53,7 @@ public:
     ExecutionEngine();
     static TypeRef type;
     void finish();
-    void exec_file(std::string fname);
+    void exec_code(std::shared_ptr<const Code> code);
     void exec_runspec(ObjectRef runspec);
     void subscribe_thunk(std::shared_ptr<const Thunk> source, std::shared_ptr<const Thunk> dest);
     void finalize_thunk(std::shared_ptr<const Thunk> source, BaseObjectRef result);

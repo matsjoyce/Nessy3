@@ -1,4 +1,4 @@
-from modules.a import x, y, z as f, _ as m
+from modules.a import x, y, z as f, * as m
 from modules import a
 
 print("Assertions: 4")

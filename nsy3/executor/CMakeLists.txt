@@ -42,7 +42,7 @@ add_executable(executor ${PROJECT_FILES})
 target_link_libraries(executor docopt)
 
 add_executable(executor_coverage ${PROJECT_FILES})
-target_compile_definitions(executor_coverage PRIVATE COVERAGE)
+#target_compile_definitions(executor_coverage PRIVATE COVERAGE)
 target_compile_options(executor_coverage PRIVATE
     "-fprofile-arcs"
     "-ftest-coverage"

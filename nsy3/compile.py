@@ -105,7 +105,7 @@ class CompiledCode:
                 num_lines += 128
             linenotab.append(num_bcode)
             linenotab.append(num_lines % 256)
-        print(linenotab)
+        #print(linenotab)
         return bytes(linenotab)
 
     def to_bytes(self):
@@ -114,7 +114,7 @@ class CompiledCode:
         linenotab = self.create_linenotab(full_code.linearize())
         full_code.resolve_labels()
         header = serialisation.serialise({
-            "fname": str(self.fname.resolve()),
+            "fname": str(self.fname.resolve()) if self.fname else "",
             "imports": self.imports,
             "name": self.modname
         })
@@ -133,7 +133,11 @@ class CompiledCode:
 
     def add_import(self, name):
         if name[0] == ".":
-            raise RuntimeError("IMP ...")
+            prefix = self.modname.split(".")
+            while name and name[0] == ".":
+                name.pop(0)
+                prefix.pop()
+            name = prefix + name
         absolute_name = ".".join(name)
         self.imports.append(absolute_name)
         return absolute_name
@@ -360,23 +364,21 @@ def compile_stmt(a, ctx):
     elif isinstance(a, ast.ImportStmt):
         skip_label = ctx.label()
         modname = ctx.add_import(a.modname)
-        if a.names is None:
-            yield Bytecode.SET(ctx.const(a.modname[0], wrap=False), Bytecode.CALL(Bytecode.GET(ctx.const("import", wrap=False)), ctx.const(a.modname[0])))
-        else:
-            yield Bytecode.CALL(Bytecode.GET(ctx.const("import", wrap=False)), ctx.const(modname))
-            yield Bytecode.DUP(len(a.names) - 1)
-            ctx.savestack(len(a.names))
-            for modname, varname in a.names:
-                ctx.savestack(-1)
-                if modname == "_":
-                    yield Bytecode.SET(ctx.const(varname, wrap=False), Bytecode.IGNORE())
-                else:
-                    # This is a name = mod.name where we know that mod is not a thunk and so thunks can be ignored.
-                    # This is not taken advantage of, but might be in the future.
-                    skip_label = ctx.label()
-                    yield ctx.setskip(skip_label)
-                    yield Bytecode.SET(ctx.const(varname, wrap=False), Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const(modname)))
-                    yield skip_label
+        yield Bytecode.CALL(Bytecode.GET(ctx.const("import", wrap=False)), ctx.const(modname))
+        yield Bytecode.DUP(len(a.names) - 1)
+        ctx.savestack(len(a.names))
+        for modname, varname in a.names:
+            ctx.savestack(-1)
+            if modname == "*":
+                yield Bytecode.SET(ctx.const(varname, wrap=False), Bytecode.IGNORE())
+            else:
+                # This is a name = mod.name where we know that mod is not a thunk and so thunks can be ignored.
+                # This is not taken advantage of, but might be in the future.
+                # Invalidated, ignore above
+                skip_label = ctx.label()
+                yield ctx.setskip(skip_label)
+                yield Bytecode.SET(ctx.const(varname, wrap=False), Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const(modname)))
+                yield skip_label
     elif isinstance(a, ast.ForStmt):
         start_label, end_label = ctx.label(), ctx.label()
         full_end_label = ctx.label()

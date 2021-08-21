@@ -42,6 +42,7 @@ public:
     Code(TypeRef type, ObjectRef header, ObjectRef body);
     static const unsigned int npos = -1;
     static std::shared_ptr<const Code> from_file(std::string fname);
+    static std::shared_ptr<const Code> from_string(std::string code);
 
     void print(std::ostream& stream) const;
     static TypeRef type;

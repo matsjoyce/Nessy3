@@ -36,14 +36,14 @@ std::string convert_from_objref<std::string>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const String*>(objref.get())) {
         return obj->get();
     }
-    throw std::runtime_error("Not numeric");
+    throw std::runtime_error("Not a string");
 }
 
 std::basic_string<unsigned char> convert_from_objref<std::basic_string<unsigned char>>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const Bytes*>(objref.get())) {
         return obj->get();
     }
-    throw std::runtime_error("Not numeric");
+    throw std::runtime_error("Not bytes");
 }
 
 ObjectRef convert_from_objref<ObjectRef>::convert(const ObjectRef& objref) {
