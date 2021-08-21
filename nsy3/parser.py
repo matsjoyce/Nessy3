@@ -205,7 +205,7 @@ class NSY2Parser(Parser):
         ("left", AND),
         ("right", NOT),
         ("nonassoc", LTE, GTE, LT, GT, EQEQ, NEQ),
-        ("left", COLONPLUSEQ),
+        ("left", COLONPLUS),
         ("left", PLUS, MINUS),
         ("left", STAR, SLASH, SLASHSLASH, PERCENT),
         ("right", UMINUS),
@@ -297,10 +297,6 @@ class NSY2Parser(Parser):
     def block(self, p):
         return ast.Block(p, p.stmts)
 
-    @_("LAMBDA defargs ARROW expr %prec ARROW")
-    def expr(self, p):
-        return ast.Func(p, p.defargs, ast.Return(p, p.expr))
-
     @_("DEF NAME LPAREN defargs RPAREN block")
     def stmt(self, p):
         return ast.AssignStmt(p, p.NAME, ast.Func(p, p.defargs, p.block))
@@ -364,6 +360,10 @@ class NSY2Parser(Parser):
     @_("expr IF expr ELSE expr %prec IFEXPR")
     def expr(self, p):
         return ast.IfExpr(p, p.expr0, p.expr1, p.expr2)
+
+    @_("LAMBDA defargs ARROW expr %prec ARROW")
+    def expr(self, p):
+        return ast.Func(p, p.defargs, ast.Return(p, p.expr))
 
     @_("LPAREN expr RPAREN")
     def expr(self, p):
@@ -454,28 +454,28 @@ class NSY2Parser(Parser):
 
     @_(
         # Arith
-        "DOLLER multipartname PLUSEQ expr",
-        "DOLLER multipartname MINUSEQ expr",
-        "DOLLER multipartname STAREQ expr",
-        "DOLLER multipartname SLASHEQ expr",
-        "DOLLER multipartname SLASHSLASHEQ expr",
-        "DOLLER multipartname PERCENTEQ expr",
-        "DOLLER multipartname STARSTAREQ expr",
-        "DOLLER multipartname COLONPLUSEQ expr",
+        "DOLLER multipartname dflags DOLLER PLUSEQ expr",
+        "DOLLER multipartname dflags DOLLER MINUSEQ expr",
+        "DOLLER multipartname dflags DOLLER STAREQ expr",
+        "DOLLER multipartname dflags DOLLER SLASHEQ expr",
+        "DOLLER multipartname dflags DOLLER SLASHSLASHEQ expr",
+        "DOLLER multipartname dflags DOLLER PERCENTEQ expr",
+        "DOLLER multipartname dflags DOLLER STARSTAREQ expr",
+        "DOLLER multipartname dflags DOLLER COLONPLUSEQ expr",
     )
     def simple_stmt(self, p):
         old_value = ast.DollarName(p, p.multipartname, ["partial"])
-        return ast.DollarSetStmt(p, p.multipartname, ast.Binop(p, p[2][:-1], old_value, p.expr), ["modification"])
+        return ast.DollarSetStmt(p, p.multipartname, ast.Binop(p, p[4][:-1], old_value, p.expr), ["modification"])
 
-    @_("DOLLER multipartname dflags EQ expr")
+    @_("DOLLER multipartname dflags DOLLER EQ expr")
     def simple_stmt(self, p):
         return ast.DollarSetStmt(p, p.multipartname, p.expr, p.dflags)
 
-    @_("DOLLER multipartname dflags")
+    @_("DOLLER multipartname dflags DOLLER")
     def expr(self, p):
         return ast.DollarName(p, p.multipartname, p.dflags)
 
-    @_("DOLLERDOLLER multipartname")
+    @_("DOLLERDOLLER multipartname DOLLER")
     def expr(self, p):
         return ast.SequenceLiteral(p, "[]", p.multipartname)
 
@@ -602,7 +602,6 @@ class NSY2Parser(Parser):
     @_("IF expr %prec COMP")
     def comp_if(self, p):
         return ast.CompIfExpr(p, p.expr)
-
 
     def error(self, p):
         print(self.__dict__)

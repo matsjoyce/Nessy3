@@ -31,6 +31,7 @@ class Runspec:
     def compile_file(self, fname):
         comp_fname = fname.with_suffix(".nsy3c")
 
+        print("Parsing", fname)
         with fname.open() as f:
             a = parser.parse(f.read())
 
