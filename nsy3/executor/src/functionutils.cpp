@@ -4,28 +4,28 @@ int convert_from_objref<int>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const Integer*>(objref.get())) {
         return obj->get();
     }
-    throw std::runtime_error("Not an int");
+    create<TypeError>("Expected an int, got " + objref->obj_type()->name())->raise();
 }
 
 unsigned char convert_from_objref<unsigned char>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const Integer*>(objref.get())) {
         return obj->get();
     }
-    throw std::runtime_error("Not an int");
+    create<TypeError>("Expected an int, got " + objref->obj_type()->name())->raise();
 }
 
 unsigned int convert_from_objref<unsigned int>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const Integer*>(objref.get())) {
         return obj->get();
     }
-    throw std::runtime_error("Not an int");
+    create<TypeError>("Expected an int, got " + objref->obj_type()->name())->raise();
 }
 
 double convert_from_objref<double>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const Numeric*>(objref.get())) {
         return obj->to_double();
     }
-    throw std::runtime_error("Not numeric");
+    create<TypeError>("Expected numeric, got " + objref->obj_type()->name())->raise();
 }
 
 bool convert_from_objref<bool>::convert(const ObjectRef& objref) {
@@ -36,14 +36,14 @@ std::string convert_from_objref<std::string>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const String*>(objref.get())) {
         return obj->get();
     }
-    throw std::runtime_error("Not a string");
+    create<TypeError>("Expected a string, got " + objref->obj_type()->name())->raise();
 }
 
 std::basic_string<unsigned char> convert_from_objref<std::basic_string<unsigned char>>::convert(const ObjectRef& objref) {
     if (auto obj = dynamic_cast<const Bytes*>(objref.get())) {
         return obj->get();
     }
-    throw std::runtime_error("Not bytes");
+    create<TypeError>("Expected bytes, got " + objref->obj_type()->name())->raise();
 }
 
 ObjectRef convert_from_objref<ObjectRef>::convert(const ObjectRef& objref) {

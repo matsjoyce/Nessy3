@@ -41,7 +41,7 @@ inline unsigned int stack_push(unsigned char flags, const BaseObjectRef& item, c
                     auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
                     auto name = dynamic_cast<const String*>(consts[arg].get());
                     if (!name) {
-                        create<TypeException>("Name must be a string")->raise();
+                        create<TypeError>("Name must be a string")->raise();
                     }
                     auto name_thunk = std::make_shared<NameExtractThunk>(thunk->execution_engine(), name->get());
                     exec_thunk->subscribe(name_thunk);
@@ -80,218 +80,223 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
         std::cerr << "BEGIN EXEC " << position << " - " << limit_ << std::endl;
     }
 
-    while (position < limit_) {
-        auto op = static_cast<Ops>(code[position]);
-        auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
-        if (execution_debug_level >= 1) {
-            std::cerr << "S@" << position << std::endl;
-            for (auto& obj : stack) {
-                std::cerr << " - " << obj.second << std::endl;
-            }
-            std::cerr << "SD" << std::endl;
-        }
-        position += 5;
-        switch (op) {
-            case Ops::KWARG: {
-                throw std::runtime_error("IMPL");
-                break;
-            }
-            case Ops::GETATTR: {
-                auto nameobj = stack.back().second;
-                stack.pop_back();
-                auto name = dynamic_cast<const String*>(nameobj.get());
-                if (!name) {
-                    create<TypeException>("Attribute must be a string")->raise();
+    try {
+        while (position < limit_) {
+            auto op = static_cast<Ops>(code[position]);
+            auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
+            if (execution_debug_level >= 1) {
+                std::cerr << "S@" << position << std::endl;
+                for (auto& obj : stack) {
+                    std::cerr << " - " << obj.second << std::endl;
                 }
-                auto obj = stack.back().second;
-                stack.pop_back();
-                position = stack_push(0, obj->getattr(name->get()), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
-                break;
+                std::cerr << "SD" << std::endl;
             }
-            case Ops::CALL: {
-                std::vector<ObjectRef> args;
-                auto pos_iter = stack.end() - arg;
-                for (auto iter = pos_iter; iter != stack.end(); ++iter) {
-                    args.push_back(iter->second);
+            position += 5;
+            switch (op) {
+                case Ops::KWARG: {
+                    throw std::runtime_error("IMPL");
+                    break;
                 }
-                stack.erase(pos_iter, stack.end());
-                auto func = stack.back().second;
-                stack.pop_back();
-                position = stack_push(0, func->call(args), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
-                break;
-            }
-            case Ops::BINOP: {
-                auto right = stack.back().second;
-                stack.pop_back();
-                auto left = stack.back().second;
-                stack.pop_back();
-                auto op = convert<std::string>(consts[arg]);
-                BaseObjectRef res;
-                try {
-                    res = left->gettype(op)->call({right});
+                case Ops::GETATTR: {
+                    auto nameobj = stack.back().second;
+                    stack.pop_back();
+                    auto name = dynamic_cast<const String*>(nameobj.get());
+                    if (!name) {
+                        create<TypeError>("Attribute must be a string")->raise();
+                    }
+                    auto obj = stack.back().second;
+                    stack.pop_back();
+                    position = stack_push(0, obj->getattr(name->get()), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+                    break;
                 }
-                catch (const ObjectRef& exc) {
-                    if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
-                        try {
-                            res = right->gettype("r" + op)->call({left});
-                        }
-                        catch (const ObjectRef& exc2) {
-                            if (dynamic_cast<const UnsupportedOperation*>(exc2.get())) {
-                                throw exc;
+                case Ops::CALL: {
+                    std::vector<ObjectRef> args;
+                    auto pos_iter = stack.end() - arg;
+                    for (auto iter = pos_iter; iter != stack.end(); ++iter) {
+                        args.push_back(iter->second);
+                    }
+                    stack.erase(pos_iter, stack.end());
+                    auto func = stack.back().second;
+                    stack.pop_back();
+                    position = stack_push(0, func->call(args), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+                    break;
+                }
+                case Ops::BINOP: {
+                    auto right = stack.back().second;
+                    stack.pop_back();
+                    auto left = stack.back().second;
+                    stack.pop_back();
+                    auto op = convert<std::string>(consts[arg]);
+                    BaseObjectRef res;
+                    try {
+                        res = left->gettype(op)->call({right});
+                    }
+                    catch (const ObjectRef& exc) {
+                        if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
+                            try {
+                                res = right->gettype("r" + op)->call({left});
                             }
+                            catch (const ObjectRef& exc2) {
+                                if (dynamic_cast<const UnsupportedOperation*>(exc2.get())) {
+                                    throw exc;
+                                }
+                                throw;
+                            }
+                        }
+                        else {
                             throw;
                         }
                     }
-                    else {
-                        throw;
+                    position = stack_push(0, res, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+                    break;
+                }
+                case Ops::GET: {
+                    auto name = dynamic_cast<const String*>(consts[arg].get());
+                    if (!name) {
+                        create<TypeError>("Name must be a string")->raise();
                     }
+                    auto iter = env.find(name->get());
+                    if (iter == env.end()) {
+                        create<NameError>("Name '" + name->get() + "' is not defined")->raise();
+                    }
+                    position = stack_push(0, iter->second, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+                    break;
                 }
-                position = stack_push(0, res, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
-                break;
-            }
-            case Ops::GET: {
-                auto name = dynamic_cast<const String*>(consts[arg].get());
-                if (!name) {
-                    create<TypeException>("Name must be a string")->raise();
-                }
-                auto iter = env.find(name->get());
-                if (iter == env.end()) {
-                    create<NameException>("Name '" + name->get() + "' is not defined")->raise();
-                }
-                position = stack_push(0, iter->second, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
-                break;
-            }
-            case Ops::SET: {
-                auto name = dynamic_cast<const String*>(consts[arg].get());
-                if (!name) {
-                    create<TypeException>("Name must be a string")->raise();
-                }
-                env[name->get()] = stack.back().second;
-                stack.pop_back();
-                break;
-            }
-            case Ops::CONST: {
-                stack.emplace_back(std::make_pair(0, consts[arg]));
-                break;
-            }
-            case Ops::JUMP: {
-                position = arg;
-                break;
-            }
-            case Ops::JUMP_IF: {
-                auto obj = stack.back().second;
-                stack.pop_back();
-                if (obj->to_bool()) {
-                    position = arg;
-                }
-                break;
-            }
-            case Ops::JUMP_IFNOT: {
-                auto obj = stack.back().second;
-                stack.pop_back();
-                if (!obj->to_bool()) {
-                    position = arg;
-                }
-                break;
-            }
-            case Ops::JUMP_IF_KEEP: {
-                auto obj = stack.back().second;
-                if (obj->to_bool()) {
-                    position = arg;
-                }
-                break;
-            }
-            case Ops::JUMP_IFNOT_KEEP: {
-                auto obj = stack.back().second;
-                if (!obj->to_bool()) {
-                    position = arg;
-                }
-                break;
-            }
-            case Ops::DROP: {
-                for (auto i = 0u; i < arg; ++i) {
+                case Ops::SET: {
+                    auto name = dynamic_cast<const String*>(consts[arg].get());
+                    if (!name) {
+                        create<TypeError>("Name must be a string")->raise();
+                    }
+                    env[name->get()] = stack.back().second;
                     stack.pop_back();
+                    break;
                 }
-                break;
-            }
-            case Ops::RETURN: {
-                auto obj = stack.back().second;
-                stack.pop_back();
-                env["return"] = obj;
-                return env;
-            }
-            case Ops::GETENV: {
-                stack.emplace_back(std::make_pair(0, create<Env>(env)));
-                break;
-            }
-            case Ops::SETSKIP: {
-                skip_position = arg & 0xFFFF;
-                skip_save_stack = arg >> 16;
-                break;
-            }
-            case Ops::DUP: {
-                auto obj = stack.back().second;
-                for (auto i = 0u; i < arg; ++i) {
+                case Ops::CONST: {
+                    stack.emplace_back(std::make_pair(0, consts[arg]));
+                    break;
+                }
+                case Ops::JUMP: {
+                    position = arg;
+                    break;
+                }
+                case Ops::JUMP_IF: {
+                    auto obj = stack.back().second;
+                    stack.pop_back();
+                    if (obj->to_bool()) {
+                        position = arg;
+                    }
+                    break;
+                }
+                case Ops::JUMP_IFNOT: {
+                    auto obj = stack.back().second;
+                    stack.pop_back();
+                    if (!obj->to_bool()) {
+                        position = arg;
+                    }
+                    break;
+                }
+                case Ops::JUMP_IF_KEEP: {
+                    auto obj = stack.back().second;
+                    if (obj->to_bool()) {
+                        position = arg;
+                    }
+                    break;
+                }
+                case Ops::JUMP_IFNOT_KEEP: {
+                    auto obj = stack.back().second;
+                    if (!obj->to_bool()) {
+                        position = arg;
+                    }
+                    break;
+                }
+                case Ops::DROP: {
+                    for (auto i = 0u; i < arg; ++i) {
+                        stack.pop_back();
+                    }
+                    break;
+                }
+                case Ops::RETURN: {
+                    auto obj = stack.back().second;
+                    stack.pop_back();
+                    env["return"] = obj;
+                    return env;
+                }
+                case Ops::GETENV: {
+                    stack.emplace_back(std::make_pair(0, create<Env>(env)));
+                    break;
+                }
+                case Ops::SETSKIP: {
+                    skip_position = arg & 0xFFFF;
+                    skip_save_stack = arg >> 16;
+                    break;
+                }
+                case Ops::DUP: {
+                    auto obj = stack.back().second;
+                    for (auto i = 0u; i < arg; ++i) {
+                        stack.emplace_back(std::make_pair(0, obj));
+                    }
+                    break;
+                }
+                case Ops::ROT: {
+                    auto obj = stack.back();
+                    stack.pop_back();
+                    stack.insert(stack.end() - arg, obj);
+                    break;
+                }
+                case Ops::RROT: {
+                    auto obj = (stack.end() - arg - 1)->second;
+                    stack.erase(stack.end() - arg - 1);
                     stack.emplace_back(std::make_pair(0, obj));
+                    break;
                 }
-                break;
-            }
-            case Ops::ROT: {
-                auto obj = stack.back();
-                stack.pop_back();
-                stack.insert(stack.end() - arg, obj);
-                break;
-            }
-            case Ops::RROT: {
-                auto obj = (stack.end() - arg - 1)->second;
-                stack.erase(stack.end() - arg - 1);
-                stack.emplace_back(std::make_pair(0, obj));
-                break;
-            }
-            case Ops::BUILDLIST: {
-                std::vector<ObjectRef> args;
-                auto pos_iter = stack.end() - arg;
-                for (auto iter = pos_iter; iter != stack.end(); ++iter) {
-                    args.push_back(iter->second);
-                }
-                stack.erase(pos_iter, stack.end());
-                stack.emplace_back(std::make_pair(0, create<List>(args)));
-                break;
-            }
-            case Ops::UNPACK: {
-                auto obj = stack.back().second;
-                stack.pop_back();
-                if (!dynamic_cast<const List*>(obj.get())) {
-                    throw std::runtime_error("Conv iter to list");
-                }
-                auto lst = std::dynamic_pointer_cast<const List>(obj);
-                if ((arg >> 16) == HALF_INT_MAX) {
-                    if (lst->get().size() != (arg & HALF_INT_MAX)) {
-                        create<ValueException>("Expected sequence of length '" + std::to_string((arg & HALF_INT_MAX))
-                                               + "', got '" + std::to_string(lst->get().size()) + "'")->raise();
+                case Ops::BUILDLIST: {
+                    std::vector<ObjectRef> args;
+                    auto pos_iter = stack.end() - arg;
+                    for (auto iter = pos_iter; iter != stack.end(); ++iter) {
+                        args.push_back(iter->second);
                     }
+                    stack.erase(pos_iter, stack.end());
+                    stack.emplace_back(std::make_pair(0, create<List>(args)));
+                    break;
                 }
-                else if (lst->get().size() < (arg & HALF_INT_MAX) - 1) {
-                    create<ValueException>("Expected sequence of length '" + std::to_string((arg & HALF_INT_MAX) - 1)
-                                           + "' or greater, got '" + std::to_string(lst->get().size()) + "'")->raise();
-                }
-                auto idx = 0u;
-                for (auto i = 0u; i < (arg & HALF_INT_MAX); ++i) {
-                    if (i == (arg >> 16)) {
-                        std::vector<ObjectRef> subseq(lst->get().begin() + idx, lst->get().end() + (arg >> 16) - (arg & HALF_INT_MAX));
-                        stack.emplace_back(std::make_pair(0, create<List>(subseq)));
-                        idx += subseq.size();
+                case Ops::UNPACK: {
+                    auto obj = stack.back().second;
+                    stack.pop_back();
+                    if (!dynamic_cast<const List*>(obj.get())) {
+                        throw std::runtime_error("Conv iter to list");
                     }
-                    else {
-                        stack.emplace_back(std::make_pair(0, lst->get()[idx++]));
+                    auto lst = std::dynamic_pointer_cast<const List>(obj);
+                    if ((arg >> 16) == HALF_INT_MAX) {
+                        if (lst->get().size() != (arg & HALF_INT_MAX)) {
+                            create<ValueError>("Expected sequence of length '" + std::to_string((arg & HALF_INT_MAX))
+                                                + "', got '" + std::to_string(lst->get().size()) + "'")->raise();
+                        }
                     }
+                    else if (lst->get().size() < (arg & HALF_INT_MAX) - 1) {
+                        create<ValueError>("Expected sequence of length '" + std::to_string((arg & HALF_INT_MAX) - 1)
+                                            + "' or greater, got '" + std::to_string(lst->get().size()) + "'")->raise();
+                    }
+                    auto idx = 0u;
+                    for (auto i = 0u; i < (arg & HALF_INT_MAX); ++i) {
+                        if (i == (arg >> 16)) {
+                            std::vector<ObjectRef> subseq(lst->get().begin() + idx, lst->get().end() + (arg >> 16) - (arg & HALF_INT_MAX));
+                            stack.emplace_back(std::make_pair(0, create<List>(subseq)));
+                            idx += subseq.size();
+                        }
+                        else {
+                            stack.emplace_back(std::make_pair(0, lst->get()[idx++]));
+                        }
+                    }
+                    break;
                 }
-                break;
-            }
-            default: {
-                throw std::runtime_error("Unrecognized op");
+                default: {
+                    throw std::runtime_error("Unrecognized op");
+                }
             }
         }
+    }
+    catch (ExceptionContainer &exc) {
+        exc.exception->append_stack(code_->filename(), code_->lineno_for_position(position))->raise();
     }
     return env;
 }

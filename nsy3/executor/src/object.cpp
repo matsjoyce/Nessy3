@@ -69,7 +69,7 @@ ObjectRef Object::gettype(std::string name) const {
         }
     }
     if (!obj) {
-        create<NameException>("Object of type '" + type_->name() + "' has no attribute '" + name + "'")->raise();
+        create<NameError>("Object of type '" + type_->name() + "' has no attribute '" + name + "'")->raise();
     }
     if (dynamic_cast<const BuiltinFunction*>(obj.get())) {
         return create<BoundMethod>(self(), obj);
@@ -89,7 +89,7 @@ ObjectRef Object::getsuper(TypeRef type, std::string name) const {
         }
     }
     if (!obj) {
-        create<NameException>("Super object of type '" + type_->name() + "' using super of '" + type->name() + "' has no attribute '" + name + "'")->raise();
+        create<NameError>("Super object of type '" + type_->name() + "' using super of '" + type->name() + "' has no attribute '" + name + "'")->raise();
     }
     if (dynamic_cast<const BuiltinFunction*>(obj.get())) {
         return create<BoundMethod>(self(), obj);
@@ -107,7 +107,7 @@ ObjectRef Object::call_no_thunks(const std::vector<ObjectRef>& args) const {
 
 
 std::size_t Object::hash() const {
-    create<TypeException>("Type '" + type_->name() + "' is not hashable")->raise();
+    create<TypeError>("Type '" + type_->name() + "' is not hashable")->raise();
     return 0;
 }
 
@@ -601,7 +601,7 @@ TypeRef Dict::type = create<Type>("Dict", Type::basevec{Object::type}, Type::att
     {"[]", create<BuiltinFunction>([](const Dict* self, ObjectRef key) {
         auto iter = self->value.find(key);
         if (iter == self->value.end()) {
-            create<IndexException>("No such key")->raise();
+            create<IndexError>("No such key " + key->to_str())->raise();
         }
         return iter->second;
     })}
@@ -628,7 +628,7 @@ std::string Dict::to_str() const {
 TypeRef List::type = create<Type>("List", Type::basevec{Object::type}, Type::attrmap{
     {"[]", create<BuiltinFunction>([](const List* self, const Integer* idx) {
         if (idx->get() < 0 || idx->get() >= static_cast<int64_t>(self->value.size())) {
-            create<IndexException>("Index is out of bounds")->raise();
+            create<IndexError>("Index " + idx->to_str() + " is out of bounds for list of size " + std::to_string(self->value.size()))->raise();
         }
         return self->value[idx->get()];
     })},

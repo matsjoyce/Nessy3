@@ -28,7 +28,7 @@ bool not_(ObjectRef arg) {
 
 int assert(ObjectRef obj) {
     if (!obj->to_bool()) {
-        create<AssertionException>("Assertion failed")->raise();
+        create<AssertionError>("Assertion failed")->raise();
     }
     std::cout << "Assertion passed" << std::endl;
     return 1;

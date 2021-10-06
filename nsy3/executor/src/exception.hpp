@@ -4,47 +4,67 @@
 #include "object.hpp"
 
 class Exception : public Object {
-    std::string reason;
+    ObjectRef reason_;
+    std::vector<std::pair<std::string, int>> stack_trace_;
 public:
-    Exception(TypeRef type, std::string reason);
+    Exception(TypeRef type, ObjectRef reason, std::vector<std::pair<std::string, int>> stack_trace = {});
     static TypeRef type;
     std::string to_str() const override;
-    void raise() const;
+    [[ noreturn ]] void raise() const;
+    std::shared_ptr<const Exception> append_stack(std::string fname, int lineno) const;
 };
 
-class TypeException : public Exception {
+class ExceptionContainer : public std::exception {
 public:
-    using Exception::Exception;
+    ExceptionContainer(std::shared_ptr<const Exception> exception);
+    std::shared_ptr<const Exception> exception;
+    const char* what() const noexcept override;
+};
+
+
+class Error : public Object {
+    ObjectRef details_;
+public:
+    Error(TypeRef type, ObjectRef details);
+    Error(TypeRef type, std::string details);
+    static TypeRef type;
+    std::string to_str() const override;
+    [[ noreturn ]] void raise() const;
+};
+
+class TypeError : public Error {
+public:
+    using Error::Error;
     static TypeRef type;
 };
 
-class UnsupportedOperation : public TypeException {
+class UnsupportedOperation : public TypeError {
 public:
-    using TypeException::TypeException;
+    using TypeError::TypeError;
     static TypeRef type;
 };
 
-class NameException : public Exception {
+class NameError : public Error {
 public:
-    using Exception::Exception;
+    using Error::Error;
     static TypeRef type;
 };
 
-class IndexException : public Exception {
+class IndexError : public Error {
 public:
-    using Exception::Exception;
+    using Error::Error;
     static TypeRef type;
 };
 
-class ValueException : public Exception {
+class ValueError : public Error {
 public:
-    using Exception::Exception;
+    using Error::Error;
     static TypeRef type;
 };
 
-class AssertionException : public Exception {
+class AssertionError : public Error {
 public:
-    using Exception::Exception;
+    using Error::Error;
     static TypeRef type;
 };
 

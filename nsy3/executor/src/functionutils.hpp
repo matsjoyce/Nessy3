@@ -23,7 +23,7 @@ template<class T> struct convert_from_objref<std::shared_ptr<const T>> {
         if (auto obj = std::dynamic_pointer_cast<const T>(objref)) {
             return obj;
         }
-        throw std::runtime_error("Not the right type");
+        create<TypeError>("Expected a " + T::type->name() + ", got " + objref->obj_type()->name())->raise();
     }
 };
 template<class T> struct convert_from_objref<const T*> {
@@ -31,7 +31,7 @@ template<class T> struct convert_from_objref<const T*> {
         if (auto obj = dynamic_cast<const T*>(objref.get())) {
             return obj;
         }
-        throw std::runtime_error("Not the right type");
+        create<TypeError>("Expected a " + T::type->name() + ", got " + objref->obj_type()->name())->raise();
     }
 };
 template<class V> struct convert_from_objref<std::vector<V>> {
@@ -43,7 +43,7 @@ template<class V> struct convert_from_objref<std::vector<V>> {
             }
             return res;
         }
-        throw std::runtime_error("Not a list");
+        create<TypeError>("Expected a list, got " + objref->obj_type()->name())->raise();
     }
 };
 template<class K, class V> struct convert_from_objref<std::map<K, V>> {
@@ -55,7 +55,7 @@ template<class K, class V> struct convert_from_objref<std::map<K, V>> {
             }
             return res;
         }
-        throw std::runtime_error("Not a dict");
+        create<TypeError>("Expected a dict, got " + objref->obj_type()->name())->raise();
     }
 };
 

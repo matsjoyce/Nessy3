@@ -60,13 +60,8 @@ int main(int argc, const char** argv) {
             execengine.exec_runspec(runspec);
             execengine.finish();
         }
-        catch (const ObjectRef& exc) {
-            if (auto cast_exc = std::dynamic_pointer_cast<const Exception>(exc)) {
-                std::cerr << cast_exc->to_str() << std::endl;
-            }
-            else {
-                std::cerr << "NOT AN EXC!!! " << exc << std::endl;
-            }
+        catch (const ExceptionContainer& exc) {
+            std::cerr << exc.exception->to_str() << std::endl;
             return 1;
         }
         catch (const std::exception& e) {
