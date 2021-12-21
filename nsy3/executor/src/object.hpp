@@ -92,6 +92,7 @@ template<class T> struct convert_to_objref {
 };
 
 template<class T, class... Args> struct FunctionHolder : public AbstractFunctionHolder {
+    static_assert(!std::is_same<T, void>::value, "Wrapped function cannot return void");
     std::function<T(Args...)> f;
     FunctionHolder(std::function<T(Args...)> f) : f(f) {}
     BaseObjectRef call(const std::vector<ObjectRef>& args) const {
@@ -102,21 +103,6 @@ template<class T, class... Args> struct FunctionHolder : public AbstractFunction
             throw std::runtime_error("Wrong number of args");
         }
         return convert_to_objref<T>::convert(f(convert_from_objref<Args>::convert(args[Ints])...));
-    }
-};
-
-template<class... Args> struct FunctionHolder<void, Args...> : public AbstractFunctionHolder {
-    std::function<void(Args...)> f;
-    FunctionHolder(std::function<void(Args...)> f) : f(f) {}
-    BaseObjectRef call(const std::vector<ObjectRef>& args) const {
-        return call(args, std::index_sequence_for<Args...>{});
-    }
-    template<class I, I... Ints> BaseObjectRef call(const std::vector<ObjectRef>& args, std::integer_sequence<I, Ints...>) const {
-        if (sizeof...(Args) != args.size()) {
-            throw std::runtime_error("Wrong number of args");
-        }
-        f(convert_from_objref<Args>::convert(args[Ints])...);
-        return NoneType::none;
     }
 };
 

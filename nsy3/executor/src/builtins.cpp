@@ -5,13 +5,13 @@
 #include "frame.hpp"
 #include <iostream>
 
-int print(const std::vector<ObjectRef>& args) {
+ObjectRef print(const std::vector<ObjectRef>& args) {
     std::cout << " -> ";
     for (auto& arg : args) {
         std::cout << arg << " ";
     }
     std::cout << std::endl;
-    return 0;
+    return NoneType::none;
 }
 
 ObjectRef arrow(std::shared_ptr<const Code> code, int offset, std::shared_ptr<const Signature> signature, std::shared_ptr<const Env> env) {
@@ -26,12 +26,12 @@ bool not_(ObjectRef arg) {
     return !arg->to_bool();
 }
 
-int assert(ObjectRef obj) {
+ObjectRef assert(ObjectRef obj) {
     if (!obj->to_bool()) {
         create<AssertionError>("Assertion failed")->raise();
     }
     std::cout << "Assertion passed" << std::endl;
-    return 1;
+    return NoneType::none;
 }
 
 std::map<std::string, ObjectRef> builtins = {

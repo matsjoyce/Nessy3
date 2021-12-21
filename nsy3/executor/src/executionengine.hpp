@@ -39,7 +39,7 @@ class ExecutionEngine {
     BaseObjectRef dollar_get(DollarName name, unsigned int flags);
     BaseObjectRef dollar_set(DollarName, ObjectRef value, unsigned int flags);
     BaseObjectRef make_sub_thunk(DollarName name, unsigned int position);
-    void make_alias(DollarName name, DollarName alias);
+    BaseObjectRef make_alias(DollarName name, DollarName alias);
 
     void resolve_dollar(DollarName name);
     void resolve_dummy(DollarName name);

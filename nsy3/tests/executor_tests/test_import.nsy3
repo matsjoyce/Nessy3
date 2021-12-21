@@ -1,5 +1,5 @@
 from modules.a import x, y, z as f, * as m
-from modules import a
+import modules.a as a
 
 print("Assertions: 4")
 

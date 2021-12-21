@@ -8,8 +8,6 @@
 #include <cmath>
 #include "executionengine.hpp"
 
-std::vector<std::pair<std::weak_ptr<Object>, TypeRef*>> untyped_objects;
-
 std::ostream& operator<<(std::ostream& s, const ObjectRef& obj) {
     if (!obj) {
         s << "NULL OBJECT!!!";
@@ -115,8 +113,8 @@ bool Object::eq(ObjectRef other) const {
     try {
         return no_thunks(gettype("==")->call({other}))->to_bool();
     }
-    catch (const ObjectRef& exc) {
-        if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
+    catch (const ExceptionContainer& exc) {
+        if (std::dynamic_pointer_cast<const UnsupportedOperation>(exc.exception->reason())) {
             return std::dynamic_pointer_cast<const Object>(other->gettype("r==")->call({self()}))->to_bool();
         }
         throw;
@@ -152,8 +150,8 @@ std::vector<TypeRef> make_top_types() {
             try {
                 return convert<int>(a->gettype("<=>")->call_no_thunks({b})) == 0;
             }
-            catch (const ObjectRef& exc) {
-                if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
+            catch (const ExceptionContainer& exc) {
+                if (std::dynamic_pointer_cast<const UnsupportedOperation>(exc.exception->reason())) {
                     return a.get() == b.get();
                 }
                 throw;
@@ -273,10 +271,6 @@ std::vector<TypeRef> Type::make_mro(const std::vector<TypeRef>& bases) {
 
 Type::Type(TypeRef type, std::string name, std::vector<TypeRef> bases, std::map<std::string, ObjectRef> attrs)
     : Object(type), name_(name), bases_(bases), mro_(make_mro(bases)), attrs_(attrs) {
-    std::cout << "MRO for " << name << std::endl;
-    for (auto m : mro_) {
-        std::cout << "  " << m->name() << std::endl;
-    }
 }
 
 std::string Type::to_str() const {

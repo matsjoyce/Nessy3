@@ -25,15 +25,17 @@ std::string get_line_of_file(std::string fname, int lineno) {
     return res;
 }
 
+std::string ltrim(const std::string &s) {
+    size_t start = s.find_first_not_of(" \t");
+    return (start == std::string::npos) ? "" : s.substr(start);
+}
+
 std::string Exception::to_str() const {
     std::stringstream ss;
     ss << "Traceback (most recent call last):\n";
     for (auto& [fname, lineno] : stack_trace_) {
         ss << "  File \"" << fname << "\", line " << lineno << "\n";
-        auto line = get_line_of_file(fname, lineno);
-        // https://stackoverflow.com/questions/83439/remove-spaces-from-stdstring-in-c#comment238067_83538
-        line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
-        ss << "    " << line << "\n";
+        ss << "    " << ltrim(get_line_of_file(fname, lineno)) << "\n";
     }
     ss << reason_->to_str();
     return ss.str();

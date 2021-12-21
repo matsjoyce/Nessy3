@@ -134,6 +134,7 @@ class CompiledCode:
     def add_import(self, name):
         if name[0] == ".":
             prefix = self.modname.split(".")
+            name.pop(0)
             while name and name[0] == ".":
                 name.pop(0)
                 prefix.pop()

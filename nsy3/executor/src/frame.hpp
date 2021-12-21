@@ -13,9 +13,10 @@ class Frame : public Object {
     unsigned int position_ = 0, limit_ = -1;
     std::map<std::string, BaseObjectRef> env_;
     std::vector<std::pair<unsigned char, ObjectRef>> stack_;
+    std::vector<std::pair<std::string, int>> stack_trace_;
 public:
     Frame(TypeRef type, std::shared_ptr<const Code> code, unsigned int offset,
-          std::map<std::string, BaseObjectRef> env, unsigned int limit=-1, std::vector<std::pair<unsigned char, ObjectRef>> stack={});
+          std::map<std::string, BaseObjectRef> env, unsigned int limit=-1, std::vector<std::pair<unsigned char, ObjectRef>> stack={}, std::vector<std::pair<std::string, int>> stack_trace={});
     static TypeRef type;
 
     std::map<std::string, BaseObjectRef> execute() const;

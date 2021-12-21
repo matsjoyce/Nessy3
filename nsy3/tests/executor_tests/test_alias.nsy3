@@ -1,38 +1,38 @@
-$x = 1
-$y += 1
-alias($$x, $$y)
+$x$ = 1
+$y$ += 1
+alias($$x$, $$y$)
 
-$a = 1
-$b @default = 2
-alias($$a, $$b)
+$a$ = 1
+$b @default$ = 2
+alias($$a$, $$b$)
 
-$p = 1
-$q += 1
-if $z:
-    alias($$p, $$q)
+$p$ = 1
+$q$ += 1
+if $z$:
+    alias($$p$, $$q$)
 
 
-$r = 2
-$s @default = 1
-if $z:
-    alias($$r, $$s)
+$r$ = 2
+$s @default$ = 1
+if $z$:
+    alias($$r$, $$s$)
 
-$z = 1
+$z$ = 1
 
-$char.b = 1
-$C.b += 1
-alias($$char, $$C)
+$char.b$ = 1
+$C.b$ += 1
+alias($$char$, $$C$)
 
 if test_thunk("final"):
     print("Assertions: 6")
 
-    assert $x == 2
-    assert $y == 2
+    assert $x$ == 2
+    assert $y$ == 2
 
-    assert $b == 1
+    assert $b$ == 1
 
-    assert $p == 2
+    assert $p$ == 2
 
-    assert $r == 2
+    assert $r$ == 2
 
-    assert $C.b == 2
+    assert $C.b$ == 2

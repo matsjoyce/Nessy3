@@ -15,24 +15,24 @@ assert (0 or 0) == 0
 # Test short-circuiting
 
 for i in ["1", "2", "3", "4"]:
-    $x[i] @default = 0
+    $x[i] @default$ = 0
 
 def f(a):
-    $x[a] += 1
+    $x[a]$ += 1
     return 2
 
 def g(a, b):
-    $x[a] += 2
+    $x[a]$ += 2
     return b
 
 assert (g("1", TRUE) and f("1")) == 2
 assert (g("2", FALSE) and f("2")) == 0
 
-assert $x["1"] == 3
-assert $x["2"] == 2
+assert $x["1"]$ == 3
+assert $x["2"]$ == 2
 
 assert (g("3", TRUE) or f("3")) == 1
 assert (g("4", FALSE) or f("4")) == 2
 
-assert $x["3"] == 2
-assert $x["4"] == 3
+assert $x["3"]$ == 2
+assert $x["4"]$ == 3

@@ -40,9 +40,7 @@ class Runspec:
             rel_path = rel_path.parent
         modname = ".".join(rel_path.with_suffix("").parts)
 
-        #print(a.to_str())
         c = compile.compile(a, fname, modname)
-        #print(c.to_str())
 
         with comp_fname.open("wb") as f:
             f.write(c.to_bytes())
@@ -57,7 +55,6 @@ class Runspec:
     def find_module(self, modname):
         for path in self.search_paths:
             basename = path / pathlib.Path(modname.replace(".", "/"))
-            print(basename)
             if basename.with_suffix(".nsy3").exists():
                 return basename.with_suffix(".nsy3")
             if (basename / "__main__.nsy3").exists():
@@ -94,12 +91,15 @@ class Runspec:
             proc.kill()
             stdout, stderr = proc.communicate()
         if proc.returncode:
-            print(stderr, stdout)
+            print(stdout)
             raise RuntimeError("Execution failed")
         if return_stdout:
             return stdout
         if return_dvs:
-            bytes = re.search(b"=== MARKER ===\n(.*)=== END MARKER ===", stdout, re.DOTALL).group(1)
+            m = re.search(b"=== MARKER ===\n(.*)=== END MARKER ===", stdout, re.DOTALL)
+            bytes = m.group(1)
             obj, pos = serialisation.deserialise(bytes)
             assert pos == len(bytes)
+            print(stdout[:m.start(0)].decode())
+            print(stdout[m.end(0):].decode())
             return obj

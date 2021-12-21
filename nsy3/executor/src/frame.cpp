@@ -13,8 +13,9 @@ int Frame::execution_debug_level = 0;
 TypeRef Frame::type = create<Type>("Frame", Type::basevec{Object::type});
 
 Frame::Frame(TypeRef type, std::shared_ptr<const Code> code, unsigned int offset,
-             std::map<std::string, BaseObjectRef> env, unsigned int limit, std::vector<std::pair<unsigned char, ObjectRef>> stack)
-    : Object(type), code_(code), position_(offset), limit_(limit), env_(env), stack_(stack) {
+             std::map<std::string, BaseObjectRef> env, unsigned int limit, std::vector<std::pair<unsigned char, ObjectRef>> stack,
+             std::vector<std::pair<std::string, int>> stack_trace)
+    : Object(type), code_(code), position_(offset), limit_(limit), env_(env), stack_(stack), stack_trace_(stack_trace) {
     this->env_["__code__"] = code;
 }
 
@@ -131,13 +132,13 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
                     try {
                         res = left->gettype(op)->call({right});
                     }
-                    catch (const ObjectRef& exc) {
-                        if (dynamic_cast<const UnsupportedOperation*>(exc.get())) {
+                    catch (const ExceptionContainer& exc) {
+                        if (std::dynamic_pointer_cast<const UnsupportedOperation>(exc.exception->reason())) {
                             try {
                                 res = right->gettype("r" + op)->call({left});
                             }
-                            catch (const ObjectRef& exc2) {
-                                if (dynamic_cast<const UnsupportedOperation*>(exc2.get())) {
+                            catch (const ExceptionContainer& exc2) {
+                                if (std::dynamic_pointer_cast<const UnsupportedOperation>(exc2.exception->reason())) {
                                     throw exc;
                                 }
                                 throw;
@@ -297,6 +298,7 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
     }
     catch (ExceptionContainer &exc) {
         exc.exception->append_stack(code_->filename(), code_->lineno_for_position(position))->raise();
+
     }
     return env;
 }
@@ -334,7 +336,7 @@ void ExecutionThunk::notify(BaseObjectRef obj) const {
     }
     auto new_stack = frame->stack_;
     new_stack.push_back(std::make_pair(0, std::dynamic_pointer_cast<const Object>(obj)));
-    auto new_frame = create<Frame>(frame->code_, frame->position_, frame->env_, frame->limit_, std::move(new_stack));
+    auto new_frame = create<Frame>(frame->code_, frame->position_, frame->env_, frame->limit_, std::move(new_stack), frame->stack_trace_);
     finalize(create<Env>(new_frame->execute()));
 }
 

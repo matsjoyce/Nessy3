@@ -97,19 +97,20 @@ template<class T> T alias_move(const DollarName& alias, T& m, ExecutionEngine* t
     return new_m;
 }
 
-void ExecutionEngine::make_alias(DollarName name, DollarName alias) {
+BaseObjectRef ExecutionEngine::make_alias(DollarName name, DollarName alias) {
     std::cerr << "Alias " << alias << " = " << name << std::endl;
     state.aliases[alias] = name;
     for (auto& item : state.dollar_values) {
         if (is_prefix_of(alias, item.first)) {
             // Cause conflict deliberately
             state.set_thunks[item.first].push_back(std::make_shared<SetThunk>(this, item.first, item.second, 0));
-            return;
+            return NoneType::none;
         }
     }
 
     state.get_thunks = alias_move(alias, state.get_thunks, this);
     state.set_thunks = alias_move(alias, state.set_thunks, this);
+    return NoneType::none;
 }
 
 DollarName ExecutionEngine::dealias(const DollarName& name) {
@@ -212,7 +213,7 @@ bool ExecutionEngine::finalize_abandoned_sub_thunks() {
                 done_something = true;
             }
             else {
-                    // Maybe more, leave it
+                // Maybe more, leave it
                 ++iter;
             }
         }
@@ -340,6 +341,7 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
     state.resolution_order.push_back(name);
     ObjectRef value;
 
+    // Update sub iterators
     DollarName parent = {name[0]};
     for (auto iter = ++name.begin(); iter != name.end(); ++iter) {
         auto& pnames = state.sub_names[parent];
@@ -365,6 +367,7 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
         parent.push_back(*iter);
     }
 
+    // Initial value set
     {
         auto& thunks = state.set_thunks[name];
         bool has_nondefault_set = false;
@@ -393,6 +396,7 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
         }
     }
 
+    // Modifying sets
     {
         while (true) {
             std::cerr << "RML" << std::endl;
@@ -431,6 +435,9 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
     }
     std::cerr << "RMLe" << std::endl;
     notify_thunks();
+    state.set_thunks.erase(name);
+
+    // Handle gets
     state.dollar_values[name] = value;
 
     for (auto& thunk : state.get_thunks[name]) {
@@ -438,7 +445,6 @@ void ExecutionEngine::resolve_dollar(DollarName name) {
         thunk->finalize(value);
     }
     state.get_thunks.erase(name);
-    state.set_thunks.erase(name);
     notify_thunks();
 }
 

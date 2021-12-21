@@ -12,6 +12,7 @@ public:
     std::string to_str() const override;
     [[ noreturn ]] void raise() const;
     std::shared_ptr<const Exception> append_stack(std::string fname, int lineno) const;
+    ObjectRef reason() const { return reason_; };
 };
 
 class ExceptionContainer : public std::exception {
