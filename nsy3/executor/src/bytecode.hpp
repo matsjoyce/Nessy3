@@ -28,7 +28,8 @@ enum class Ops : unsigned char {
     ROT,
     RROT,
     BUILDLIST,
-    UNPACK
+    UNPACK,
+    SKIPVAR
 };
 
 class Code : public Object {

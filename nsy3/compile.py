@@ -1,11 +1,10 @@
 import itertools
 import struct
 
-from . import ast, bytecode, serialisation
-from .bytecode import Bytecode
+from . import ast, bytecode, serialisation, skipanalysis
+from .bytecode import Bytecode, Combine
 
-
-RETURN_SKIP = HALF_INT_MAX = 2 ** 16 - 1
+HALF_INT_MAX = 2 ** 16 - 1
 
 DOLLAR_GET_FLAGS = {
     "partial": 1
@@ -17,16 +16,6 @@ DOLLAR_SET_FLAGS = {
 }
 
 REFLECTED_BINOPS = ["+", "-", "*", "/", "//", "%", "**", "==", "!=", "<", ">", "<=", ">="]
-
-class Combine:
-    def __init__(self, a, b):
-        self.a, self.b = a, b
-
-    def __str__(self):
-        return f"{self.a} | {self.b}"
-
-    def __index__(self):
-        return ((self.a.pos if isinstance(self.a, bytecode.BCode) else self.a) & 0xFFFF) + (self.b << 16)
 
 
 class CompiledCode:
@@ -41,7 +30,6 @@ class CompiledCode:
         self.consts = []
         self.functions = []
         self.code = None
-        self.stacksave = 0
         self.imports = []
 
     def lookup_var(self, name):
@@ -109,7 +97,8 @@ class CompiledCode:
         return bytes(linenotab)
 
     def to_bytes(self):
-        full_code = Bytecode.SEQ(self.code, *self.functions)
+        bits = [self.code, *self.functions]
+        full_code = Bytecode.SEQ(*[skipanalysis.skipanalysis(bit) for bit in bits])
         full_code.resolve_labels()
         linenotab = self.create_linenotab(full_code.linearize())
         header = serialisation.serialise({
@@ -143,12 +132,6 @@ class CompiledCode:
         absolute_name = ".".join(name)
         self.imports.append(absolute_name)
         return absolute_name
-
-    def savestack(self, num):
-        self.stacksave += num
-
-    def setskip(self, pos):
-        return Bytecode.SETSKIP(Combine(pos, self.stacksave))
 
 
 def compile_expr_iter(a, ctx):
@@ -302,25 +285,21 @@ def compile_stmt(a, ctx):
             raise RuntimeError()
         yield Bytecode.JUMP(labels[0])
     elif isinstance(a, ast.Return):
-        yield ctx.setskip(RETURN_SKIP)
         yield Bytecode.RETURN(compile_expr(a.expr, ctx))
     elif isinstance(a, ast.Block):
         for s in a.stmts:
             yield from compile_stmt(s, ctx)
     elif isinstance(a, ast.ExprStmt):
         skip_label = ctx.label()
-        yield ctx.setskip(skip_label)
         yield compile_expr(a.expr, ctx)
         yield Bytecode.DROP(1)
         yield skip_label
     elif isinstance(a, ast.AssignStmt):
         skip_label = ctx.label()
-        yield ctx.setskip(skip_label)
         yield Bytecode.SET(ctx.const(a.name, wrap=False), compile_expr(a.expr, ctx))
         yield skip_label
     elif isinstance(a, ast.DollarSetStmt):
         skip_label = ctx.label()
-        yield ctx.setskip(skip_label)
         flags = 0
         for flag in a.flags:
             flags |= DOLLAR_SET_FLAGS[flag]
@@ -331,11 +310,6 @@ def compile_stmt(a, ctx):
         else_label, end_label = ctx.label(), ctx.label()
         if_comp = Bytecode.SEQ(*list(compile_stmt(a.if_block, ctx)))
         else_comp = Bytecode.SEQ(*list(compile_stmt(a.else_block, ctx)))
-        # If there is a return statement in either block, the skip must be a return skip to avoid another return statement executing
-        if any(op.type == Bytecode.RETURN for op in itertools.chain(if_comp.linearize(), else_comp.linearize())):
-            yield ctx.setskip(RETURN_SKIP)
-        else:
-            yield ctx.setskip(end_label)
         yield Bytecode.JUMP_IFNOT(else_label, compile_expr(a.expr, ctx))
         yield if_comp
         yield Bytecode.JUMP(end_label)
@@ -348,10 +322,6 @@ def compile_stmt(a, ctx):
         block_comp = Bytecode.SEQ(*list(compile_stmt(a.block, ctx)))
         # If there is a return statement in the block, the skip must be a return skip to avoid another return statement executing
         yield start_label
-        if any(op.type == Bytecode.RETURN for op in block_comp.linearize()):
-            yield ctx.setskip(RETURN_SKIP)
-        else:
-            yield ctx.setskip(end_label)
         yield Bytecode.JUMP_IFNOT(end_label, compile_expr(a.expr, ctx))
         yield from compile_stmt(a.block, ctx)
         yield Bytecode.JUMP(start_label)
@@ -359,7 +329,6 @@ def compile_stmt(a, ctx):
         ctx.pop_loop()
     elif isinstance(a, ast.Assert):
         skip_label = ctx.label()
-        yield ctx.setskip(skip_label)
         yield Bytecode.CALL(Bytecode.GET(ctx.const("assert", wrap=False)), compile_expr(a.expr, ctx))
         yield Bytecode.DROP(1)
         yield skip_label
@@ -368,37 +337,25 @@ def compile_stmt(a, ctx):
         modname = ctx.add_import(a.modname)
         yield Bytecode.CALL(Bytecode.GET(ctx.const("import", wrap=False)), ctx.const(modname))
         yield Bytecode.DUP(len(a.names) - 1)
-        ctx.savestack(len(a.names))
         for modname, varname in a.names:
-            ctx.savestack(-1)
             if modname == "*":
                 yield Bytecode.SET(ctx.const(varname, wrap=False), Bytecode.IGNORE())
             else:
                 # This is a name = mod.name where we know that mod is not a thunk and so thunks can be ignored.
                 # This is not taken advantage of, but might be in the future.
                 # Invalidated, ignore above
-                skip_label = ctx.label()
-                yield ctx.setskip(skip_label)
                 yield Bytecode.SET(ctx.const(varname, wrap=False), Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const(modname)))
-                yield skip_label
     elif isinstance(a, ast.ForStmt):
         start_label, end_label = ctx.label(), ctx.label()
         full_end_label = ctx.label()
         ctx.push_loop(start_label, end_label)
-        ctx.savestack(1)
         block_comp = Bytecode.SEQ(*list(compile_stmt(a.block, ctx)))
         # If there is a return statement in the block, the skip must be a return skip to avoid another return statement executing
         return_inside_block = any(op.type == Bytecode.RETURN for op in block_comp.linearize())
-        inner_setskip = ctx.setskip(RETURN_SKIP if return_inside_block else end_label)
-        ctx.savestack(-1)
-        outer_setskip = ctx.setskip(RETURN_SKIP if return_inside_block else full_end_label)
-        yield outer_setskip
         yield Bytecode.CALL(Bytecode.GETATTR(compile_expr(a.expr, ctx), ctx.const("__iter__")))
         yield start_label
-        yield outer_setskip
         yield Bytecode.CALL(Bytecode.GETATTR(Bytecode.IGNORE(), ctx.const("__next__")))
         yield Bytecode.JUMP_IFNOT_KEEP(end_label)
-        yield inner_setskip
         yield Bytecode.UNPACK(Combine(2, HALF_INT_MAX))
         yield Bytecode.SET(ctx.const(a.name, wrap=False), Bytecode.IGNORE())
         yield block_comp

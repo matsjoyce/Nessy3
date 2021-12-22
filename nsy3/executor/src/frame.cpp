@@ -21,34 +21,28 @@ Frame::Frame(TypeRef type, std::shared_ptr<const Code> code, unsigned int offset
 
 inline unsigned int stack_push(unsigned char flags, const BaseObjectRef& item, const Frame& frame, const std::basic_string<unsigned char>& code,
                        const std::vector<ObjectRef>& consts, std::vector<std::pair<unsigned char, ObjectRef>>& stack,
-                       unsigned int& position, std::map<std::string, BaseObjectRef>& env, unsigned int skip_position, unsigned int skip_save_stack
+                       unsigned int& position, std::map<std::string, BaseObjectRef>& env, unsigned int skip_position, unsigned int skip_save_stack, const std::vector<unsigned int>& skipvars
                        ) {
     if (auto thunk = dynamic_cast<const Thunk*>(item.get())) {
         if (skip_position != 0xFFFF) {
             std::cerr << "Skip from " << position << " to " << skip_position << std::endl;
-            std::vector<std::pair<unsigned char, ObjectRef>> sf_stack;
-            sf_stack.reserve(stack.size() - skip_save_stack);
-            for (auto iter = stack.begin() + skip_save_stack; iter != stack.end(); ++iter) {
-                sf_stack.emplace_back(*iter);
-            }
-            stack.erase(stack.begin() + skip_save_stack, stack.end());
-            auto subframe = create<Frame>(frame.code(), position, env, skip_position, sf_stack);
+            auto subframe = create<Frame>(frame.code(), position, env, skip_position, stack);
 
             auto exec_thunk = std::make_shared<ExecutionThunk>(thunk->execution_engine(), subframe);
             thunk->subscribe(exec_thunk);
-            // Exploit the fact that skip_pos > pos and that nothing is going to jump out of that range to find all of the sets.
-            for (; position < skip_position; position += 5) {
-                if (static_cast<Ops>(code[position]) == Ops::SET) {
-                    auto arg = *reinterpret_cast<const unsigned int*>(code.data() + position + 1);
-                    auto name = dynamic_cast<const String*>(consts[arg].get());
-                    if (!name) {
-                        create<TypeError>("Name must be a string")->raise();
-                    }
-                    auto name_thunk = std::make_shared<NameExtractThunk>(thunk->execution_engine(), name->get());
-                    exec_thunk->subscribe(name_thunk);
-                    env[name->get()] = name_thunk;
+            for (auto var : skipvars) {
+                auto name = dynamic_cast<const String*>(consts[var].get());
+                if (!name) {
+                    create<TypeError>("Name must be a string")->raise();
                 }
+                auto name_thunk = std::make_shared<NameExtractThunk>(thunk->execution_engine(), name->get());
+                exec_thunk->subscribe(name_thunk);
+                env[name->get()] = name_thunk;
             }
+            if (skip_save_stack > stack.size()) {
+                throw std::runtime_error("stack is not large enough for skip");
+            }
+            stack.erase(stack.end() - skip_save_stack, stack.end());
             return skip_position;
         }
         else {
@@ -75,6 +69,7 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
     auto position = position_;
     auto env = env_;
     unsigned int skip_position = limit_, skip_save_stack = 0;
+    std::vector<unsigned int> skipvars;
 
 
     if (execution_debug_level >= 1) {
@@ -107,7 +102,7 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
                     }
                     auto obj = stack.back().second;
                     stack.pop_back();
-                    position = stack_push(0, obj->getattr(name->get()), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+                    position = stack_push(0, obj->getattr(name->get()), *this, code, consts, stack, position, env, skip_position, skip_save_stack, skipvars);
                     break;
                 }
                 case Ops::CALL: {
@@ -119,7 +114,7 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
                     stack.erase(pos_iter, stack.end());
                     auto func = stack.back().second;
                     stack.pop_back();
-                    position = stack_push(0, func->call(args), *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+                    position = stack_push(0, func->call(args), *this, code, consts, stack, position, env, skip_position, skip_save_stack, skipvars);
                     break;
                 }
                 case Ops::BINOP: {
@@ -148,7 +143,7 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
                             throw;
                         }
                     }
-                    position = stack_push(0, res, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+                    position = stack_push(0, res, *this, code, consts, stack, position, env, skip_position, skip_save_stack, skipvars);
                     break;
                 }
                 case Ops::GET: {
@@ -160,7 +155,7 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
                     if (iter == env.end()) {
                         create<NameError>("Name '" + name->get() + "' is not defined")->raise();
                     }
-                    position = stack_push(0, iter->second, *this, code, consts, stack, position, env, skip_position, skip_save_stack);
+                    position = stack_push(0, iter->second, *this, code, consts, stack, position, env, skip_position, skip_save_stack, skipvars);
                     break;
                 }
                 case Ops::SET: {
@@ -229,6 +224,7 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
                 case Ops::SETSKIP: {
                     skip_position = arg & 0xFFFF;
                     skip_save_stack = arg >> 16;
+                    skipvars.clear();
                     break;
                 }
                 case Ops::DUP: {
@@ -290,6 +286,10 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
                     }
                     break;
                 }
+                case Ops::SKIPVAR: {
+                    skipvars.push_back(arg);
+                    break;
+                }
                 default: {
                     throw std::runtime_error("Unrecognized op");
                 }
@@ -298,7 +298,6 @@ std::map<std::string, BaseObjectRef> Frame::execute() const {
     }
     catch (ExceptionContainer &exc) {
         exc.exception->append_stack(code_->filename(), code_->lineno_for_position(position))->raise();
-
     }
     return env;
 }
@@ -357,7 +356,7 @@ void NameExtractThunk::notify(BaseObjectRef obj) const {
         finalize(iter->second);
     }
     else {
-        finalize(NoneType::none);
+        create<NameError>("Name '" + name + "' is not defined")->raise();
     }
 }
 

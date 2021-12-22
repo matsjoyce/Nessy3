@@ -1,0 +1,21 @@
+print("Assertions: 2")
+
+def f1():
+    # Ensure no additional iterations of the loop are executed
+    for i in Range(0, 10):
+        assert i == 0
+        if $x$:
+            return 1
+
+
+def f2():
+    # Ensure no additional iterations of the loop are executed
+    for i in Range(0, 10):
+        assert i == 0
+        if $x$:
+            break
+
+f1()
+f2()
+
+$x$ = TRUE

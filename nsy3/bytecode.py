@@ -128,6 +128,8 @@ class Bytecode(metaclass=BCodeMeta):
     # first half: number of variables
     # second half: idx of * variable
     UNPACK = BCodeType("arg")
+    # Add a variable that should be set to a thunk when a skip occurs, list is cleared by SETSKIP
+    SKIPVAR = BCodeType("name")
 
     # Fake ops
 
@@ -135,3 +137,14 @@ class Bytecode(metaclass=BCodeMeta):
     LABEL = BCodeType("id", emit=False)
     LINENO = BCodeType("lineno", emit=False)
     IGNORE = BCodeType(emit=False)
+
+
+class Combine:
+    def __init__(self, a, b):
+        self.a, self.b = a, b
+
+    def __str__(self):
+        return f"{self.a} | {self.b}"
+
+    def __index__(self):
+        return ((self.a.pos if isinstance(self.a, BCode) else self.a) & 0xFFFF) + (self.b << 16)

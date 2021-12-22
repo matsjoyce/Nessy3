@@ -87,6 +87,7 @@ void Code::print(std::ostream& stream) const {
             case Ops::RROT: stream << "RROT " << arg << "\n"; break;
             case Ops::BUILDLIST: stream << "BUILDLIST " << arg << "\n"; break;
             case Ops::UNPACK: stream << "UNPACK " << (arg & 0xFFFF) << " " << (arg >> 16) << "\n"; break;
+            case Ops::SKIPVAR: stream << "SKIPVAR " << arg << "\n"; break;
             default: stream << "UNKNOWN " << static_cast<unsigned int>(op) << " " << arg << "\n"; break;
         }
         pos += 5;
