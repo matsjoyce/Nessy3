@@ -83,4 +83,6 @@ public:
     std::shared_ptr<const Signature> signature() const { return signature_; }
 };
 
+std::string get_line_of_file(std::string fname, int lineno, bool trim = false);
+
 #endif // BYTECODE_HPP

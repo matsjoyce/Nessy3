@@ -211,7 +211,8 @@ std::vector<TypeRef> make_top_types() {
         {"**", unsupported_op("**")},
         {"r**", unsupported_op("r**")},
         {"[]", unsupported_op("[]")},
-        {"__type__", create<Property>(create<BuiltinFunction>(method(&Object::obj_type)))}
+        {"__type__", create<Property>(create<BuiltinFunction>(method(&Object::obj_type)))},
+        {"to_str", create<BuiltinFunction>(method(&Object::to_str))}
     };
 
     auto obj_type = std::make_shared<Type>(type_type, "Object", Type::basevec{}, obj_attrs);

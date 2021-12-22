@@ -5,6 +5,7 @@ Usage:
 """
 
 import pathlib
+from pprint import pprint
 import subprocess
 import docopt
 
@@ -31,4 +32,4 @@ elif args["--runspec"]:
         f.write(runspec.to_bytes())
 else:
     print("Running executor on", runspec)
-    print(runspec.execute(return_dvs=True))
+    pprint(runspec.execute(return_dvs=True))

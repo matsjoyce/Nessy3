@@ -4,30 +4,11 @@
 #include <cctype>
 
 #include "exception.hpp"
+#include "bytecode.hpp"
 
 TypeRef Exception::type = create<Type>("Exception", Type::basevec{Object::type});
 
 Exception::Exception(TypeRef type, ObjectRef reason, std::vector< std::pair< std::string, int > > stack_trace) : Object(type), reason_(reason), stack_trace_(stack_trace) {
-}
-
-std::string get_line_of_file(std::string fname, int lineno) {
-    std::string res;
-    std::ifstream f(fname);
-    int current_line = 1;
-    while (f) {
-        std::getline(f, res);
-        if (current_line == lineno) {
-            return res;
-        }
-        ++current_line;
-    }
-    res.clear();
-    return res;
-}
-
-std::string ltrim(const std::string &s) {
-    size_t start = s.find_first_not_of(" \t");
-    return (start == std::string::npos) ? "" : s.substr(start);
 }
 
 std::string Exception::to_str() const {
@@ -35,7 +16,7 @@ std::string Exception::to_str() const {
     ss << "Traceback (most recent call last):\n";
     for (auto& [fname, lineno] : stack_trace_) {
         ss << "  File \"" << fname << "\", line " << lineno << "\n";
-        ss << "    " << ltrim(get_line_of_file(fname, lineno)) << "\n";
+        ss << "    " << get_line_of_file(fname, lineno, true) << "\n";
     }
     ss << reason_->to_str();
     return ss.str();

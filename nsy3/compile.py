@@ -112,7 +112,6 @@ class CompiledCode:
         full_code = Bytecode.SEQ(self.code, *self.functions)
         full_code.resolve_labels()
         linenotab = self.create_linenotab(full_code.linearize())
-        full_code.resolve_labels()
         header = serialisation.serialise({
             "fname": str(self.fname.resolve()) if self.fname else "",
             "imports": self.imports,
@@ -135,6 +134,8 @@ class CompiledCode:
         if name[0] == ".":
             prefix = self.modname.split(".")
             name.pop(0)
+            if not self.fname.stem == "__main__":
+                prefix.pop()
             while name and name[0] == ".":
                 name.pop(0)
                 prefix.pop()
@@ -387,7 +388,6 @@ def compile_stmt(a, ctx):
         ctx.savestack(1)
         block_comp = Bytecode.SEQ(*list(compile_stmt(a.block, ctx)))
         # If there is a return statement in the block, the skip must be a return skip to avoid another return statement executing
-        yield start_label
         return_inside_block = any(op.type == Bytecode.RETURN for op in block_comp.linearize())
         inner_setskip = ctx.setskip(RETURN_SKIP if return_inside_block else end_label)
         ctx.savestack(-1)

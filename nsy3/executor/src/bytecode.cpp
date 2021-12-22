@@ -60,7 +60,7 @@ void Code::print(std::ostream& stream) const {
             lineno_change = true;
         }
         if (lineno_change) {
-            stream << "Line " << lineno << "\n";
+            stream << "Line " << lineno << ": " << get_line_of_file(fname, lineno, true) << "\n";
         }
         auto op = code[pos];
         auto arg = *reinterpret_cast<const unsigned int*>(code.data() + pos + 1);
@@ -151,7 +151,7 @@ Function::Function(TypeRef type, std::shared_ptr<const Code> code, int offset, s
 BaseObjectRef Function::call(const std::vector<ObjectRef>& args) const {
     auto new_env = env;
     if (args.size() > signature_->names.size() || args.size() < signature_->names.size() - signature_->defaults.size()) {
-        throw std::runtime_error("Wrong no. args.");
+        create<ValueError>("Wrong number of arguments")->raise();
     }
     auto name_iter = signature_->names.begin();
     for (auto arg_iter = args.begin(); arg_iter != args.end(); ++name_iter, ++arg_iter) {
@@ -165,4 +165,24 @@ BaseObjectRef Function::call(const std::vector<ObjectRef>& args) const {
 
 std::string Function::to_str() const {
     return "F(?)";
+}
+
+std::string ltrim(const std::string &s) {
+    size_t start = s.find_first_not_of(" \t");
+    return (start == std::string::npos) ? "" : s.substr(start);
+}
+
+std::string get_line_of_file(std::string fname, int lineno, bool trim) {
+    std::string res;
+    std::ifstream f(fname);
+    int current_line = 1;
+    while (f) {
+        std::getline(f, res);
+        if (current_line == lineno) {
+            return trim ? ltrim(res) : res;
+        }
+        ++current_line;
+    }
+    res.clear();
+    return res;
 }

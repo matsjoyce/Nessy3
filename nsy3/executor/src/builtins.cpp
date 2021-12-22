@@ -34,6 +34,34 @@ ObjectRef assert(ObjectRef obj) {
     return NoneType::none;
 }
 
+class Range : public Object {
+    int start_, stop_;
+public:
+    Range(TypeRef type, int start, int stop) : Object(type), start_(start), stop_(stop) {}
+    std::string to_str() const override {
+        return "Range(" + std::to_string(start_) +  ", " + std::to_string(stop_) + ")";
+    }
+    static TypeRef type;
+    ObjectRef next() const {
+        if (start_ >= stop_) {
+            return NoneType::none;
+        }
+        else {
+            return create<List>(std::vector<ObjectRef>{create<Range>(start_ + 1, stop_), create<Integer>(start_)});
+        }
+    }
+};
+
+TypeRef Range::type = create<Type>("Range", Type::basevec{Object::type}, Type::attrmap{
+    {"__iter__", create<BuiltinFunction>([](ObjectRef self) -> ObjectRef {
+        return self;
+    })},
+    {"__next__", create<BuiltinFunction>(method(&Range::next))},
+    {"__new__", create<BuiltinFunction>([](int start, int stop) -> ObjectRef {
+        return create<Range>(start, stop);
+    })}
+});
+
 std::map<std::string, ObjectRef> builtins = {
     // Types
     {"Object", Object::type},
@@ -44,6 +72,7 @@ std::map<std::string, ObjectRef> builtins = {
     {"Bytes", Bytes::type},
     {"List", List::type},
     {"Dict", Dict::type},
+    {"Range", Range::type},
 
     // Consts
     {"TRUE", Boolean::true_},
