@@ -356,7 +356,9 @@ void NameExtractThunk::notify(BaseObjectRef obj) const {
         finalize(iter->second);
     }
     else {
-        create<NameError>("Name '" + name + "' is not defined")->raise();
+        // FIXME Strictly speaking we should raise an error. However, we only want to raise an error
+        // if something is actually listening, which we can't tell at this point.
+        finalize(NoneType::none);
     }
 }
 
